@@ -1,0 +1,23 @@
+plugins {
+  id 'com.android.library'
+  id 'expo-module-gradle-plugin'
+}
+
+group = 'expo.modules.gtrackalarm'
+version = '0.1.0'
+
+android {
+  namespace "expo.modules.gtrackalarm"
+  defaultConfig {
+    versionCode 1
+    versionName "0.1.0"
+  }
+  lintOptions {
+    abortOnError false
+  }
+}
+
+dependencies {
+  // HeadlessJsTaskService, used to run the JS tick task.
+  implementation 'com.facebook.react:react-android'
+}

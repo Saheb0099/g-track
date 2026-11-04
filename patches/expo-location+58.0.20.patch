@@ -1,0 +1,17 @@
+diff --git a/node_modules/expo-location/android/src/main/java/expo/modules/location/LocationModule.kt b/node_modules/expo-location/android/src/main/java/expo/modules/location/LocationModule.kt
+index 8088ec6..1373d66 100644
+--- a/node_modules/expo-location/android/src/main/java/expo/modules/location/LocationModule.kt
++++ b/node_modules/expo-location/android/src/main/java/expo/modules/location/LocationModule.kt
+@@ -327,9 +327,9 @@ class LocationModule : Module(), SensorEventListener, ActivityEventListener {
+       if (!shouldUseForegroundService && isMissingBackgroundPermissions()) {
+         throw LocationBackgroundUnauthorizedException()
+       }
+-      if (!AppForegroundedSingleton.isForegrounded && options.foregroundService != null) {
+-        throw ForegroundServiceStartNotAllowedException()
+-      }
++      // G Track patch: let Android decide. Apps exempt from battery optimization (or woken by an
++      // exact alarm or boot) may start a location service from the background; if Android
++      // refuses, LocationTaskConsumer logs it and returns without crashing.
+ 
+       if (shouldUseForegroundService && !hasForegroundServicePermissions()) {
+         throw ForegroundServicePermissionsException()

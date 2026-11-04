@@ -7,6 +7,7 @@ import {
 import type { Session } from '@supabase/supabase-js';
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 
+import { resetTracking } from '@/features/location/tracking';
 import { queryClient } from '@/lib/query';
 import { supabase } from '@/lib/supabase';
 
@@ -34,7 +35,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const { data } = supabase.auth.onAuthStateChange((event, session) => {
       // Covers every way a session ends (sign-out, expired refresh token), not just the button.
-      if (event === 'SIGNED_OUT') queryClient.clear();
+      if (event === 'SIGNED_OUT') {
+        queryClient.clear();
+        // Stop sharing, and drop unsent points so they can't upload under the next account.
+        void resetTracking().catch(() => {});
+      }
       setState({ session, loading: false });
     });
     return () => data.subscription.unsubscribe();

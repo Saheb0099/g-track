@@ -1,0 +1,18 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+  <!-- Exact alarms: granted automatically on Android 13+ for apps installed outside the Play Store. -->
+  <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
+  <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" android:maxSdkVersion="32" />
+  <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+  <uses-permission android:name="android.permission.WAKE_LOCK" />
+
+  <application>
+    <receiver android:name="expo.modules.gtrackalarm.TickReceiver" android:exported="false" />
+    <receiver android:name="expo.modules.gtrackalarm.BootReceiver" android:exported="true">
+      <intent-filter>
+        <action android:name="android.intent.action.BOOT_COMPLETED" />
+        <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+      </intent-filter>
+    </receiver>
+    <service android:name="expo.modules.gtrackalarm.TickService" android:exported="false" />
+  </application>
+</manifest>

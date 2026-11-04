@@ -7,6 +7,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Button } from '@/components/button';
 import { MAX_MEMBERS, useMyGroups, type GroupSummary } from '@/features/groups/api';
 import { takePendingInvite } from '@/features/groups/pending-invite';
+import { TrackingBanner } from '@/features/location/tracking-banner';
 import { useAuth } from '@/lib/auth';
 import { friendlyError } from '@/lib/errors';
 import { usePullToRefresh, useRefreshOnFocus } from '@/lib/query';
@@ -63,6 +64,7 @@ export default function MyGroups() {
         keyExtractor={(g) => g.id}
         renderItem={renderGroup}
         contentContainerStyle={styles.list}
+        ListHeaderComponent={<TrackingBanner />}
         refreshControl={<RefreshControl refreshing={pull.refreshing} onRefresh={pull.onRefresh} />}
         ListEmptyComponent={
           groups.isPending ? (
