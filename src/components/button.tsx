@@ -1,21 +1,40 @@
-import { ActivityIndicator, Pressable, StyleSheet, Text, type StyleProp, type ViewStyle } from 'react-native';
+import type { ReactNode } from 'react';
+import { ActivityIndicator, Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 
-import { useColors } from '@/lib/theme';
+import { type as typeStyles, useColors, type Colors } from '@/lib/theme';
+
+type Variant = 'primary' | 'secondary' | 'danger' | 'strong';
 
 type Props = {
   title: string;
   onPress: () => void;
-  variant?: 'primary' | 'secondary' | 'danger';
+  variant?: Variant;
   loading?: boolean;
   disabled?: boolean;
+  icon?: ReactNode;
+  size?: 'large' | 'small';
   style?: StyleProp<ViewStyle>;
 };
 
-export function Button({ title, onPress, variant = 'primary', loading, disabled, style }: Props) {
+function palette(colors: Colors, variant: Variant) {
+  switch (variant) {
+    case 'primary':
+      return { bg: colors.accent, fg: colors.onAccent };
+    case 'strong':
+      return { bg: colors.strong, fg: colors.onStrong };
+    case 'danger':
+      return { bg: colors.dangerFill, fg: colors.danger };
+    case 'secondary':
+      return { bg: colors.fill, fg: colors.text };
+  }
+}
+
+/** A pill button. */
+export function Button({ title, onPress, variant = 'primary', loading, disabled, icon, size = 'large', style }: Props) {
   const colors = useColors();
-  const filled = variant === 'primary';
-  const textColor = filled ? colors.onAccent : variant === 'danger' ? colors.danger : colors.text;
+  const { bg, fg } = palette(colors, variant);
   const inactive = disabled || loading;
+  const height = size === 'large' ? 52 : 38;
 
   return (
     <Pressable
@@ -25,22 +44,25 @@ export function Button({ title, onPress, variant = 'primary', loading, disabled,
       accessibilityState={{ disabled: inactive, busy: loading }}
       style={({ pressed }) => [
         styles.base,
-        filled
-          ? { backgroundColor: colors.accent }
-          : { borderWidth: 1, borderColor: variant === 'danger' ? colors.danger : colors.border },
-        { opacity: inactive ? 0.5 : pressed ? 0.7 : 1 },
+        { height, borderRadius: height / 2, backgroundColor: bg, opacity: inactive ? 0.45 : pressed ? 0.75 : 1 },
+        size === 'small' && styles.small,
         style,
       ]}>
       {loading ? (
-        <ActivityIndicator color={textColor} />
+        <ActivityIndicator color={fg} />
       ) : (
-        <Text style={[styles.text, { color: textColor }]}>{title}</Text>
+        <View style={styles.row}>
+          {icon}
+          <Text style={[typeStyles.button, size === 'small' && styles.smallText, { color: fg }]}>{title}</Text>
+        </View>
       )}
     </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
-  base: { height: 50, borderRadius: 12, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 20 },
-  text: { fontSize: 16, fontWeight: '600' },
+  base: { alignItems: 'center', justifyContent: 'center', paddingHorizontal: 20 },
+  small: { paddingHorizontal: 16 },
+  row: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  smallText: { fontSize: 14 },
 });

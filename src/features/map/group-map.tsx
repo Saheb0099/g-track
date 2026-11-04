@@ -1,29 +1,41 @@
-import { Ionicons } from '@expo/vector-icons';
 import { Camera, GeoJSONSource, Layer, Map, Marker, type CameraRef } from '@maplibre/maplibre-react-native';
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 
-import { Avatar } from '@/components/avatar';
+import { Avatar, avatarColor } from '@/components/avatar';
 import type { Member } from '@/features/groups/api';
 import type { LivePosition } from '@/features/map/api';
 import { boundsAround, circlePolygon } from '@/features/map/geo';
 import { useMapStyle } from '@/features/map/styles';
-import { useColors } from '@/lib/theme';
+import { fonts, useColors } from '@/lib/theme';
 
 /** A position older than this is drawn faded: the phone has stopped reporting. */
-const STALE_MS = 20 * 60_000;
+export const STALE_MS = 20 * 60_000;
 /** Accuracy rings are only worth drawing when the fix is rough. */
-const MIN_RING_M = 30;
-const EDGE_PADDING = { top: 60, right: 60, bottom: 60, left: 60 };
+const MIN_RING_M = 25;
 
 export type GroupMapHandle = {
   focus: (userId: string) => void;
+  /** Moves to the person without changing the zoom (for following). */
+  follow: (userId: string) => void;
   showEveryone: () => void;
 };
 
-type Props = { positions: LivePosition[]; members: Member[]; now: number };
+type Props = {
+  positions: LivePosition[];
+  members: Member[];
+  now: number;
+  meId?: string;
+  selectedId: string | null;
+  onSelect: (userId: string | null) => void;
+  /** Space covered by floating UI, kept clear when framing everyone. */
+  insets: { top: number; bottom: number };
+};
 
-export const GroupMap = forwardRef<GroupMapHandle, Props>(function GroupMap({ positions, members, now }, ref) {
+export const GroupMap = forwardRef<GroupMapHandle, Props>(function GroupMap(
+  { positions, members, now, meId, selectedId, onSelect, insets },
+  ref,
+) {
   const colors = useColors();
   const mapStyle = useMapStyle();
   const camera = useRef<CameraRef>(null);
@@ -31,9 +43,9 @@ export const GroupMap = forwardRef<GroupMapHandle, Props>(function GroupMap({ po
   // The camera ignores moves made before the map has loaded its style.
   const [loaded, setLoaded] = useState(false);
 
-  const names = useMemo(() => new globalThis.Map(members.map((m) => [m.userId, m])), [members]);
-  const ringColor = (stale: boolean) => (stale ? colors.muted : colors.accent);
+  const people = useMemo(() => new globalThis.Map(members.map((m) => [m.userId, m])), [members]);
   const points = useMemo(() => positions.map((p) => [p.lng, p.lat] as [number, number]), [positions]);
+  const padding = { top: insets.top + 40, bottom: insets.bottom + 40, left: 48, right: 72 };
 
   const rings = useMemo<GeoJSON.FeatureCollection>(
     () => ({
@@ -42,7 +54,7 @@ export const GroupMap = forwardRef<GroupMapHandle, Props>(function GroupMap({ po
         .filter((p) => (p.accuracyM ?? 0) >= MIN_RING_M)
         .map((p) => ({
           type: 'Feature',
-          properties: { userId: p.userId },
+          properties: {},
           geometry: circlePolygon([p.lng, p.lat], p.accuracyM ?? 0),
         })),
     }),
@@ -51,18 +63,27 @@ export const GroupMap = forwardRef<GroupMapHandle, Props>(function GroupMap({ po
 
   function showEveryone(duration = 800) {
     const bounds = boundsAround(points);
-    if (bounds) camera.current?.fitBounds(bounds, { padding: EDGE_PADDING, duration });
+    if (bounds) camera.current?.fitBounds(bounds, { padding, duration });
+  }
+
+  function find(userId: string) {
+    return positions.find((p) => p.userId === userId);
   }
 
   useImperativeHandle(ref, () => ({
     focus: (userId) => {
-      const p = positions.find((x) => x.userId === userId);
-      if (p) camera.current?.flyTo({ center: [p.lng, p.lat], zoom: 15, duration: 800 });
+      const p = find(userId);
+      // Offset so the person sits in the visible area above the sheet.
+      if (p) camera.current?.flyTo({ center: [p.lng, p.lat], zoom: 16, duration: 800, padding });
+    },
+    follow: (userId) => {
+      const p = find(userId);
+      if (p) camera.current?.easeTo({ center: [p.lng, p.lat], duration: 600, padding });
     },
     showEveryone: () => showEveryone(),
   }));
 
-  // Frame everyone once, when the first positions arrive; after that the user is in control.
+  // Frame everyone once the map is ready and the first positions are in.
   useEffect(() => {
     if (!loaded || fittedOnce.current || points.length === 0) return;
     fittedOnce.current = true;
@@ -71,66 +92,86 @@ export const GroupMap = forwardRef<GroupMapHandle, Props>(function GroupMap({ po
   }, [loaded, points.length]);
 
   return (
-    <View style={styles.container}>
-      <Map
-        style={StyleSheet.absoluteFill}
-        mapStyle={mapStyle}
-        logo={false}
-        compass
-        onDidFinishLoadingMap={() => setLoaded(true)}>
-        <Camera ref={camera} initialViewState={{ center: [0, 20], zoom: 1 }} />
+    <Map
+      style={StyleSheet.absoluteFill}
+      mapStyle={mapStyle}
+      logo={false}
+      compass={false}
+      // The OpenStreetMap credit must stay visible: just under the top bar, clear of the sheet.
+      attributionPosition={{ top: insets.top + 8, left: 16 }}
+      // Texture rendering lets the frosted panels blur the map behind them.
+      androidView="texture"
+      onDidFinishLoadingMap={() => setLoaded(true)}
+      onPress={() => onSelect(null)}>
+      <Camera ref={camera} initialViewState={{ center: [0, 20], zoom: 1 }} />
 
-        <GeoJSONSource id="accuracy" data={rings}>
-          <Layer
-            type="fill"
-            id="accuracy-fill"
-            paint={{ 'fill-color': colors.accent, 'fill-opacity': 0.12, 'fill-outline-color': colors.accent }}
-          />
-        </GeoJSONSource>
+      <GeoJSONSource id="accuracy" data={rings}>
+        <Layer
+          type="fill"
+          id="accuracy-fill"
+          paint={{ 'fill-color': colors.accent, 'fill-opacity': 0.12, 'fill-outline-color': colors.accent }}
+        />
+      </GeoJSONSource>
 
-        {positions.map((p) => {
-          const member = names.get(p.userId);
-          const stale = now - Date.parse(p.recordedAt) > STALE_MS;
-          return (
-            // A pin: the marker's bottom edge, the tip of the pointer, sits exactly on the location.
-            <Marker key={p.userId} id={p.userId} lngLat={[p.lng, p.lat]} anchor="bottom">
-              <View style={[styles.marker, { opacity: stale ? 0.5 : 1 }]}>
-                <Text
-                  numberOfLines={1}
-                  style={[styles.name, { color: colors.text, backgroundColor: colors.background }]}>
-                  {member?.displayName.split(' ')[0] ?? ''}
+      {positions.map((p) => {
+        const member = people.get(p.userId);
+        const name = member?.displayName ?? '?';
+        const stale = now - Date.parse(p.recordedAt) > STALE_MS;
+        const selected = p.userId === selectedId;
+        const label = p.userId === meId ? 'You' : name.split(' ')[0];
+        const size = selected ? 54 : 46;
+        return (
+          // A pin: the marker's bottom edge, the tip of the pointer, sits exactly on the location.
+          <Marker
+            key={p.userId}
+            id={p.userId}
+            lngLat={[p.lng, p.lat]}
+            anchor="bottom"
+            onPress={() => onSelect(p.userId)}>
+            <View style={[styles.marker, { opacity: stale ? 0.55 : 1 }]} accessibilityLabel={`${name} on the map`}>
+              <View style={[styles.label, { backgroundColor: colors.glass, borderColor: colors.glassBorder }]}>
+                <Text style={[styles.labelText, { color: colors.text }]} numberOfLines={1}>
+                  {label}
                 </Text>
-                <View style={[styles.ring, { borderColor: ringColor(stale) }]}>
-                  <Avatar name={member?.displayName ?? '?'} uri={member?.avatarUrl} size={36} />
-                </View>
-                <View style={[styles.pointer, { borderTopColor: ringColor(stale) }]} />
               </View>
-            </Marker>
-          );
-        })}
-      </Map>
-
-      {points.length > 1 && (
-        <Pressable
-          onPress={() => showEveryone()}
-          accessibilityLabel="Show everyone"
-          style={[styles.fab, { backgroundColor: colors.background, borderColor: colors.border }]}>
-          <Ionicons name="people-outline" size={20} color={colors.text} />
-        </Pressable>
-      )}
-      {points.length === 0 && (
-        <View style={[styles.empty, { backgroundColor: colors.background }]}>
-          <Text style={{ color: colors.muted }}>No one in this group is sharing a location yet.</Text>
-        </View>
-      )}
-    </View>
+              <View
+                style={[
+                  styles.pin,
+                  {
+                    borderRadius: size / 2 + 3,
+                    borderColor: selected ? colors.accent : '#FFFFFF',
+                    backgroundColor: avatarColor(name),
+                  },
+                ]}>
+                <Avatar name={name} uri={member?.avatarUrl} size={size} />
+              </View>
+              <View style={[styles.pointer, { borderTopColor: selected ? colors.accent : '#FFFFFF' }]} />
+            </View>
+          </Marker>
+        );
+      })}
+    </Map>
   );
 });
 
 const styles = StyleSheet.create({
-  container: { height: 340, borderRadius: 14, overflow: 'hidden' },
   marker: { alignItems: 'center' },
-  ring: { borderWidth: 3, borderRadius: 24, padding: 1 },
+  label: {
+    marginBottom: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 999,
+    borderWidth: 1,
+  },
+  labelText: { fontFamily: fonts.bold, fontSize: 12 },
+  pin: {
+    borderWidth: 3,
+    shadowColor: '#0E1116',
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 5,
+  },
   pointer: {
     width: 0,
     height: 0,
@@ -140,26 +181,5 @@ const styles = StyleSheet.create({
     borderLeftColor: 'transparent',
     borderRightColor: 'transparent',
     marginTop: -1,
-  },
-  name: { marginBottom: 2, fontSize: 12, fontWeight: '700', paddingHorizontal: 6, borderRadius: 6, overflow: 'hidden' },
-  fab: {
-    position: 'absolute',
-    top: 12,
-    right: 12,
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  empty: {
-    position: 'absolute',
-    left: 12,
-    right: 12,
-    bottom: 12,
-    padding: 12,
-    borderRadius: 10,
-    alignItems: 'center',
   },
 });

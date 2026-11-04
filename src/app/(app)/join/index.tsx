@@ -5,7 +5,7 @@ import { StyleSheet, Text, View } from 'react-native';
 import { Button } from '@/components/button';
 import { TextField } from '@/components/text-field';
 import { hasLookAlikes, isValidCode, normalizeCode } from '@/features/groups/api';
-import { useColors } from '@/lib/theme';
+import { fonts, type, useColors } from '@/lib/theme';
 
 export default function EnterCode() {
   const colors = useColors();
@@ -44,6 +44,6 @@ export default function EnterCode() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, padding: 16, gap: 16 },
-  code: { fontSize: 24, letterSpacing: 6, fontWeight: '700' },
-  warning: { fontSize: 14, lineHeight: 20 },
+  code: { fontSize: 26, letterSpacing: 8, fontFamily: fonts.extrabold, height: 60 },
+  warning: { ...type.caption, fontSize: 14, lineHeight: 20 },
 });

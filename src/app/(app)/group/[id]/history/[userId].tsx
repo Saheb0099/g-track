@@ -1,45 +1,74 @@
 import { Ionicons } from '@expo/vector-icons';
-import { Stack, useLocalSearchParams } from 'expo-router';
-import { useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import BottomSheet, { BottomSheetScrollView, type BottomSheetBackgroundProps } from '@gorhom/bottom-sheet';
+import { BlurTargetView } from 'expo-blur';
+import { router, useLocalSearchParams } from 'expo-router';
+import { StatusBar } from 'expo-status-bar';
+import { useMemo, useRef, useState, type ComponentRef } from 'react';
+import {
+  ActivityIndicator,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  useColorScheme,
+  useWindowDimensions,
+  View,
+} from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { Avatar } from '@/components/avatar';
+import { StatTile } from '@/components/card';
+import { Glass, GlassTarget } from '@/components/glass';
+import { GlassButton } from '@/components/glass-button';
 import { useMembers } from '@/features/groups/api';
 import { recentDays, useDayHistory } from '@/features/history/api';
 import { HistoryMap, type HistoryMapHandle } from '@/features/history/history-map';
 import { buildTimeline, travelledM, type Stay, type TimelineItem } from '@/features/history/timeline';
+import { useAuth } from '@/lib/auth';
 import { friendlyError } from '@/lib/errors';
-import { useColors } from '@/lib/theme';
+import { fonts, radius, type as typeStyles, useColors } from '@/lib/theme';
 
-const time = (ms: number) => new Date(ms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+const clock = (ms: number) => new Date(ms).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
 
 function duration(ms: number) {
   const minutes = Math.round(ms / 60_000);
   if (minutes < 60) return `${minutes} min`;
   const h = Math.floor(minutes / 60);
   const m = minutes % 60;
-  return m ? `${h} h ${m} min` : `${h} h`;
+  return m ? `${h} h ${String(m).padStart(2, '0')} min` : `${h} h`;
 }
 
 const distance = (m: number) => (m < 1000 ? `${Math.round(m)} m` : `${(m / 1000).toFixed(1)} km`);
 
+function SheetBackground({ style }: BottomSheetBackgroundProps) {
+  return <Glass radius={radius.sheet} style={style} />;
+}
+
 export default function MemberHistory() {
   const colors = useColors();
+  const dark = useColorScheme() === 'dark';
+  const safe = useSafeAreaInsets();
+  const { height } = useWindowDimensions();
   const { id, userId } = useLocalSearchParams<{ id: string; userId: string }>();
+  const { session } = useAuth();
   const members = useMembers(id);
   const member = members.data?.find((m) => m.userId === userId);
 
   const days = useMemo(() => recentDays(), []);
   const [dayIndex, setDayIndex] = useState(0);
-  const day = days[dayIndex];
-  const history = useDayHistory(userId, day);
+  const history = useDayHistory(userId, days[dayIndex]);
 
   const points = useMemo(() => history.data ?? [], [history.data]);
   const timeline = useMemo(() => buildTimeline(points), [points]);
   const stays = useMemo(() => timeline.filter((i): i is Stay => i.kind === 'stay'), [timeline]);
   const [selected, setSelected] = useState<Stay | null>(null);
   const map = useRef<HistoryMapHandle>(null);
+  const blurTarget = useRef<ComponentRef<typeof View>>(null);
 
-  const firstName = member?.displayName.split(' ')[0];
+  const isYou = userId === session?.user.id;
+  const name = member?.displayName ?? '';
+  const title = isYou ? 'Your week' : `${name.split(' ')[0] || 'Their'}'s week`;
+  const top = safe.top + 12;
 
   function pickDay(index: number) {
     setDayIndex(index);
@@ -52,68 +81,103 @@ export default function MemberHistory() {
   }
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <Stack.Screen options={{ title: firstName ? `${firstName}'s week` : 'History' }} />
+    <View style={styles.container}>
+      <StatusBar style={dark ? 'light' : 'dark'} />
+      <BlurTargetView ref={blurTarget} style={StyleSheet.absoluteFill}>
+        <HistoryMap
+          ref={map}
+          points={points}
+          stays={stays}
+          selected={selected}
+          insets={{ top: top + 110, bottom: height * 0.42 }}
+        />
+      </BlurTargetView>
 
-      {/* flexGrow 0: a horizontal ScrollView otherwise stretches to fill the column's height. */}
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        style={styles.daysBar}
-        contentContainerStyle={styles.days}>
-        {days.map((d, i) => {
-          const active = i === dayIndex;
-          return (
-            <Pressable
-              key={d.start.toISOString()}
-              onPress={() => pickDay(i)}
-              accessibilityRole="button"
-              accessibilityState={{ selected: active }}
-              style={[
-                styles.chip,
-                { borderColor: active ? colors.accent : colors.border, backgroundColor: active ? colors.accent : 'transparent' },
-              ]}>
-              <Text style={[styles.chipText, { color: active ? colors.onAccent : colors.text }]}>{d.label}</Text>
-            </Pressable>
-          );
-        })}
-      </ScrollView>
-
-      <View style={styles.mapArea}>
-        <HistoryMap ref={map} points={points} stays={stays} selected={selected} />
-      </View>
-
-      <ScrollView contentContainerStyle={styles.list}>
-        {history.isPending ? (
-          <ActivityIndicator style={styles.loading} />
-        ) : history.isError ? (
-          <Text style={{ color: colors.danger }}>{friendlyError(history.error)}</Text>
-        ) : points.length === 0 ? (
-          <Text style={[styles.empty, { color: colors.muted }]}>No locations were recorded on this day.</Text>
-        ) : (
-          <>
-            <Text style={[styles.summary, { color: colors.muted }]}>
-              {stays.length} {stays.length === 1 ? 'place' : 'places'} · {distance(travelledM(timeline))} travelled ·{' '}
-              {points.length} points from {time(points[0].time)} to {time(points.at(-1)!.time)}
-            </Text>
-            {timeline.length === 0 && (
-              <Text style={[styles.empty, { color: colors.muted }]}>
-                On the move all day, with no stop of 10 minutes or more.
+      <GlassTarget.Provider value={blurTarget}>
+        <View style={[styles.top, { top }]}>
+          <View style={styles.titleRow}>
+            <GlassButton onPress={() => router.back()} accessibilityLabel="Back">
+              <Ionicons name="chevron-back" size={22} color={colors.text} />
+            </GlassButton>
+            <Glass radius={24} floating style={styles.titlePill}>
+              <Avatar name={name || '?'} uri={member?.avatarUrl} size={28} />
+              <Text style={[typeStyles.bodyStrong, { color: colors.text }]} numberOfLines={1}>
+                {title}
               </Text>
+            </Glass>
+          </View>
+
+          <Glass radius={24} floating style={styles.daysGlass}>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              // flexGrow 0: a horizontal ScrollView otherwise stretches to the full height available.
+              style={styles.daysScroll}
+              contentContainerStyle={styles.days}>
+              {days.map((d, i) => {
+                const active = i === dayIndex;
+                return (
+                  <Pressable
+                    key={d.start.toISOString()}
+                    onPress={() => pickDay(i)}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: active }}
+                    style={[styles.day, active && { backgroundColor: colors.strong }]}>
+                    <Text style={[styles.dayText, { color: active ? colors.onStrong : colors.text }]}>{d.label}</Text>
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+          </Glass>
+        </View>
+
+        <BottomSheet
+          index={1}
+          // The sheet runs under Android's navigation bar; each height adds the bar so content clears it.
+          snapPoints={[170 + safe.bottom, '45%', '88%']}
+          enableDynamicSizing={false}
+          backgroundComponent={SheetBackground}
+          handleIndicatorStyle={{ backgroundColor: colors.fill, width: 40, height: 5 }}
+          style={styles.sheet}>
+          <BottomSheetScrollView contentContainerStyle={[styles.sheetContent, { paddingBottom: safe.bottom + 24 }]}>
+            {history.isPending ? (
+              <ActivityIndicator style={styles.loading} />
+            ) : history.isError ? (
+              <Text style={[typeStyles.body, { color: colors.danger }]}>{friendlyError(history.error)}</Text>
+            ) : points.length === 0 ? (
+              <Text style={[typeStyles.body, styles.empty, { color: colors.muted }]}>
+                No locations were recorded on this day.
+              </Text>
+            ) : (
+              <>
+                <View style={styles.tiles}>
+                  <StatTile label="places" value={String(stays.length)} />
+                  <StatTile label="travelled" value={distance(travelledM(timeline))} />
+                  <StatTile label="first point" value={clock(points[0].time)} />
+                </View>
+                {timeline.length === 0 && (
+                  <Text style={[typeStyles.body, styles.empty, { color: colors.muted }]}>
+                    On the move all day, with no stop of 10 minutes or more.
+                  </Text>
+                )}
+                <View>
+                  {timeline.map((item, i) => (
+                    <TimelineRow
+                      key={`${item.kind}-${item.from}`}
+                      item={item}
+                      index={stays.indexOf(item as Stay) + 1}
+                      first={i === 0}
+                      last={i === timeline.length - 1}
+                      selected={item === selected}
+                      onPress={item.kind === 'stay' ? () => showStay(item) : undefined}
+                    />
+                  ))}
+                </View>
+              </>
             )}
-            {timeline.map((item, i) => (
-              <TimelineRow
-                key={`${item.kind}-${item.from}`}
-                item={item}
-                index={stays.indexOf(item as Stay) + 1}
-                selected={item === selected}
-                onPress={item.kind === 'stay' ? () => showStay(item) : undefined}
-                last={i === timeline.length - 1}
-              />
-            ))}
-          </>
-        )}
-      </ScrollView>
+          </BottomSheetScrollView>
+        </BottomSheet>
+      </GlassTarget.Provider>
     </View>
   );
 }
@@ -121,18 +185,21 @@ export default function MemberHistory() {
 function TimelineRow({
   item,
   index,
+  first,
+  last,
   selected,
   onPress,
-  last,
 }: {
   item: TimelineItem;
   index: number;
+  first: boolean;
+  last: boolean;
   selected: boolean;
   onPress?: () => void;
-  last: boolean;
 }) {
   const colors = useColors();
   const stay = item.kind === 'stay';
+  const nodeColor = first ? colors.success : colors.accent;
   return (
     <Pressable
       onPress={onPress}
@@ -140,30 +207,32 @@ function TimelineRow({
       accessibilityRole={onPress ? 'button' : undefined}
       style={({ pressed }) => [styles.row, { opacity: pressed ? 0.6 : 1 }]}>
       <View style={styles.rail}>
-        <View
-          style={[
-            styles.node,
-            stay
-              ? { borderColor: colors.accent, backgroundColor: selected ? colors.accent : colors.background }
-              : { borderColor: colors.border, backgroundColor: colors.border, width: 10, height: 10 },
-          ]}
-        />
+        {stay ? (
+          <View
+            style={[
+              styles.node,
+              { borderColor: nodeColor, backgroundColor: selected ? nodeColor : 'transparent' },
+            ]}
+          />
+        ) : (
+          <View style={[styles.tripNode, { backgroundColor: colors.muted }]} />
+        )}
         {!last && <View style={[styles.line, { backgroundColor: colors.border }]} />}
       </View>
       <View style={styles.rowText}>
         {stay ? (
           <>
-            <Text style={[styles.rowTitle, { color: colors.text }]}>
+            <Text style={[typeStyles.bodyStrong, { color: colors.text }]}>
               Place {index} · {duration(item.to - item.from)}
             </Text>
-            <Text style={{ color: colors.muted }}>
-              {time(item.from)} – {time(item.to)}
+            <Text style={[typeStyles.caption, { color: colors.muted }]}>
+              {clock(item.from)} – {clock(item.to)}
             </Text>
           </>
         ) : (
           <View style={styles.trip}>
-            <Ionicons name="navigate-outline" size={14} color={colors.muted} />
-            <Text style={{ color: colors.muted }}>
+            <Ionicons name="navigate" size={13} color={colors.muted} />
+            <Text style={[typeStyles.caption, { color: colors.muted, fontSize: 14 }]}>
               Moved {distance(item.distanceM)} in {duration(item.to - item.from)}
             </Text>
           </View>
@@ -175,20 +244,24 @@ function TimelineRow({
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  daysBar: { flexGrow: 0 },
-  days: { paddingHorizontal: 16, paddingVertical: 12, gap: 8 },
-  chip: { borderWidth: 1, borderRadius: 18, paddingHorizontal: 14, height: 36, justifyContent: 'center' },
-  chipText: { fontSize: 14, fontWeight: '600' },
-  mapArea: { paddingHorizontal: 16 },
-  list: { padding: 16, paddingBottom: 48 },
+  top: { position: 'absolute', left: 16, right: 16, gap: 10 },
+  titleRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  titlePill: { height: 48, flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 14, flexShrink: 1 },
+  daysGlass: { alignSelf: 'flex-start', maxWidth: '100%' },
+  daysScroll: { flexGrow: 0 },
+  days: { padding: 5, gap: 4 },
+  day: { height: 36, paddingHorizontal: 14, borderRadius: 18, justifyContent: 'center' },
+  dayText: { fontFamily: fonts.semibold, fontSize: 14 },
+  sheet: { marginHorizontal: 6 },
+  sheetContent: { paddingHorizontal: 18, paddingTop: 4, gap: 16 },
   loading: { marginTop: 24 },
-  empty: { fontSize: 15, textAlign: 'center', marginTop: 16 },
-  summary: { fontSize: 14, marginBottom: 12 },
-  row: { flexDirection: 'row', gap: 12, minHeight: 52 },
+  empty: { textAlign: 'center', marginTop: 8 },
+  tiles: { flexDirection: 'row', gap: 8 },
+  row: { flexDirection: 'row', gap: 12, minHeight: 54 },
   rail: { width: 18, alignItems: 'center' },
-  node: { width: 16, height: 16, borderRadius: 8, borderWidth: 3, marginTop: 3 },
-  line: { width: 2, flex: 1, marginVertical: 2 },
+  node: { width: 16, height: 16, borderRadius: 8, borderWidth: 4, marginTop: 3 },
+  tripNode: { width: 8, height: 8, borderRadius: 4, marginTop: 6, opacity: 0.5 },
+  line: { width: 2, flex: 1, marginVertical: 3 },
   rowText: { flex: 1, paddingBottom: 14, gap: 2 },
-  rowTitle: { fontSize: 16, fontWeight: '600' },
   trip: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingTop: 1 },
 });

@@ -9,7 +9,7 @@ import { Alert, Linking, PermissionsAndroid, ScrollView, StyleSheet, Text, View 
 import { Button } from '@/components/button';
 import { brandTip } from '@/features/location/brand-tips';
 import { useSetupChecks, useTracking } from '@/features/location/use-tracking';
-import { useColors } from '@/lib/theme';
+import { radius, type as typeStyles, useColors } from '@/lib/theme';
 
 const PACKAGE = Constants.expoConfig?.android?.package ?? 'com.sahebbeshra.gtrack';
 const BRAND_DONE_KEY = 'gtrack.setup.brand-done';
@@ -89,9 +89,9 @@ export default function LocationSetup() {
 
   return (
     <ScrollView style={{ backgroundColor: colors.background }} contentContainerStyle={styles.container}>
-      <View style={[styles.banner, { borderColor: sharingOn ? colors.accent : colors.border }]}>
+      <View style={[styles.banner, { backgroundColor: sharingOn ? colors.accentFill : colors.surface }]}>
         <Ionicons name={sharingOn ? 'radio' : 'radio-outline'} size={24} color={sharingOn ? colors.accent : colors.muted} />
-        <Text style={[styles.bannerText, { color: colors.text }]}>
+        <Text style={[typeStyles.body, styles.flex, { color: colors.text }]}>
           {sharingOn
             ? 'Sharing your location. Finish the steps below so it keeps working in the background.'
             : 'Complete the first two steps to start sharing your location with your groups.'}
@@ -140,13 +140,13 @@ export default function LocationSetup() {
           </View>
         }
         footer={
-          <Text style={[styles.link, { color: colors.accent }]} onPress={() => Linking.openURL(tip.guideUrl)}>
+          <Text style={[typeStyles.bodyStrong, { color: colors.accentText }]} onPress={() => Linking.openURL(tip.guideUrl)}>
             Step-by-step guide for {tip.brand} phones
           </Text>
         }
       />
 
-      <Text style={[styles.note, { color: colors.muted }]}>
+      <Text style={[typeStyles.caption, styles.note, { color: colors.muted }]}>
         {"Tip: don't swipe G Track away in Recent apps. On many phones that stops sharing until you open it again."}
       </Text>
     </ScrollView>
@@ -168,16 +168,16 @@ function Step({
 }) {
   const colors = useColors();
   return (
-    <View style={[styles.step, { borderColor: colors.border }]}>
+    <View style={[styles.step, { backgroundColor: colors.surface }]}>
       <View style={styles.stepHeader}>
         <Ionicons
           name={done ? 'checkmark-circle' : 'ellipse-outline'}
           size={24}
-          color={done ? colors.accent : colors.muted}
+          color={done ? colors.success : colors.muted}
         />
-        <Text style={[styles.stepTitle, { color: colors.text }]}>{title}</Text>
+        <Text style={[typeStyles.bodyStrong, styles.flex, { color: colors.text, fontSize: 17 }]}>{title}</Text>
       </View>
-      <Text style={[styles.stepBody, { color: colors.muted }]}>{body}</Text>
+      <Text style={[typeStyles.body, { color: colors.muted }]}>{body}</Text>
       {!done && action}
       {footer}
     </View>
@@ -186,14 +186,10 @@ function Step({
 
 const styles = StyleSheet.create({
   container: { padding: 16, gap: 12, paddingBottom: 48 },
-  banner: { flexDirection: 'row', gap: 12, alignItems: 'center', borderWidth: 1, borderRadius: 14, padding: 14 },
-  bannerText: { flex: 1, fontSize: 15, lineHeight: 21 },
-  step: { borderWidth: 1, borderRadius: 14, padding: 16, gap: 10 },
+  banner: { flexDirection: 'row', gap: 12, alignItems: 'center', borderRadius: radius.card, padding: 16 },
+  step: { borderRadius: radius.card, padding: 16, gap: 12 },
   stepHeader: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  stepTitle: { fontSize: 17, fontWeight: '700', flex: 1 },
-  stepBody: { fontSize: 15, lineHeight: 22 },
   row: { flexDirection: 'row', gap: 10 },
   flex: { flex: 1 },
-  link: { fontSize: 15, fontWeight: '600' },
-  note: { fontSize: 14, lineHeight: 20, marginTop: 4 },
+  note: { lineHeight: 19, marginTop: 4, textAlign: 'center' },
 });

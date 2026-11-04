@@ -6,7 +6,7 @@ import { Button } from '@/components/button';
 import { TextField } from '@/components/text-field';
 import { MAX_MEMBERS, useCreateGroup } from '@/features/groups/api';
 import { friendlyError } from '@/lib/errors';
-import { useColors } from '@/lib/theme';
+import { type, useColors } from '@/lib/theme';
 
 export default function CreateGroup() {
   const colors = useColors();
@@ -42,5 +42,5 @@ export default function CreateGroup() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, padding: 16, gap: 16 },
-  error: { fontSize: 14 },
+  error: { ...type.caption, fontSize: 14 },
 });

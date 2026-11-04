@@ -5,7 +5,7 @@ import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import { Button } from '@/components/button';
 import { isValidCode, MAX_MEMBERS, normalizeCode, useJoinGroup, usePreviewGroup } from '@/features/groups/api';
 import { friendlyError } from '@/lib/errors';
-import { useColors } from '@/lib/theme';
+import { type, useColors } from '@/lib/theme';
 
 // Reached by typing a code, or by opening an invite link: gtrack://join/CODE
 export default function JoinGroup() {
@@ -76,6 +76,6 @@ export default function JoinGroup() {
 const styles = StyleSheet.create({
   container: { flex: 1, padding: 24, gap: 12, justifyContent: 'center' },
   center: { alignItems: 'center' },
-  title: { fontSize: 26, fontWeight: '800' },
-  body: { fontSize: 16, lineHeight: 23, marginBottom: 12 },
+  title: { ...type.title },
+  body: { ...type.body, fontSize: 16, lineHeight: 23, marginBottom: 12 },
 });
