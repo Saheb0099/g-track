@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import BottomSheet, { BottomSheetScrollView, type BottomSheetBackgroundProps } from '@gorhom/bottom-sheet';
+import BottomSheet, { BottomSheetScrollView } from '@gorhom/bottom-sheet';
 import { BlurTargetView } from 'expo-blur';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
@@ -11,7 +11,6 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  useColorScheme,
   useWindowDimensions,
   View,
 } from 'react-native';
@@ -21,13 +20,15 @@ import { Avatar } from '@/components/avatar';
 import { StatTile } from '@/components/card';
 import { Glass, GlassTarget } from '@/components/glass';
 import { GlassButton } from '@/components/glass-button';
+import { SheetArea, SheetBackground } from '@/components/sheet-background';
 import { useMembers } from '@/features/groups/api';
 import { recentDays, useDayHistory } from '@/features/history/api';
 import { HistoryMap, type HistoryMapHandle } from '@/features/history/history-map';
 import { buildTimeline, travelledM, type Stay, type TimelineItem } from '@/features/history/timeline';
+import { useMapIsDark } from '@/features/map/styles';
 import { useAuth } from '@/lib/auth';
 import { friendlyError } from '@/lib/errors';
-import { fonts, radius, type as typeStyles, useColors } from '@/lib/theme';
+import { fonts, type as typeStyles, useColors } from '@/lib/theme';
 
 const clock = (ms: number) => new Date(ms).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
 
@@ -41,13 +42,9 @@ function duration(ms: number) {
 
 const distance = (m: number) => (m < 1000 ? `${Math.round(m)} m` : `${(m / 1000).toFixed(1)} km`);
 
-function SheetBackground({ style }: BottomSheetBackgroundProps) {
-  return <Glass radius={radius.sheet} style={style} />;
-}
-
 export default function MemberHistory() {
   const colors = useColors();
-  const dark = useColorScheme() === 'dark';
+  const darkMap = useMapIsDark();
   const safe = useSafeAreaInsets();
   const { height } = useWindowDimensions();
   const { id, userId } = useLocalSearchParams<{ id: string; userId: string }>();
@@ -97,7 +94,7 @@ export default function MemberHistory() {
 
   return (
     <View style={styles.container}>
-      <StatusBar style={dark ? 'light' : 'dark'} />
+      <StatusBar style={darkMap ? 'light' : 'dark'} />
       <BlurTargetView ref={blurTarget} style={StyleSheet.absoluteFill}>
         <HistoryMap
           ref={map}
@@ -146,16 +143,14 @@ export default function MemberHistory() {
           </Glass>
         </View>
 
-        {/* Stops above Android's navigation bar, so nothing can sit behind its buttons. */}
-        <View style={[StyleSheet.absoluteFill, { bottom: sheetBottom }]} pointerEvents="box-none">
+        <SheetArea bottom={sheetBottom}>
           <BottomSheet
             index={1}
             // The sheet runs under Android's navigation bar; each height adds the bar so content clears it.
             snapPoints={[170, Math.round(sheetArea * 0.45), sheetArea - (top + 120)]}
             enableDynamicSizing={false}
             backgroundComponent={SheetBackground}
-            handleIndicatorStyle={{ backgroundColor: colors.fill, width: 40, height: 5 }}
-            style={styles.sheet}>
+            handleIndicatorStyle={{ backgroundColor: colors.fill, width: 40, height: 5 }}>
             <BottomSheetScrollView contentContainerStyle={styles.sheetContent}>
               {history.isPending ? (
                 <ActivityIndicator style={styles.loading} />
@@ -194,7 +189,7 @@ export default function MemberHistory() {
               )}
             </BottomSheetScrollView>
           </BottomSheet>
-        </View>
+        </SheetArea>
       </GlassTarget.Provider>
     </View>
   );
@@ -227,10 +222,7 @@ function TimelineRow({
       <View style={styles.rail}>
         {stay ? (
           <View
-            style={[
-              styles.node,
-              { borderColor: nodeColor, backgroundColor: selected ? nodeColor : 'transparent' },
-            ]}
+            style={[styles.node, { borderColor: nodeColor, backgroundColor: selected ? nodeColor : 'transparent' }]}
           />
         ) : (
           <View style={[styles.tripNode, { backgroundColor: colors.muted }]} />
@@ -270,7 +262,6 @@ const styles = StyleSheet.create({
   days: { padding: 5, gap: 4 },
   day: { height: 36, paddingHorizontal: 14, borderRadius: 18, justifyContent: 'center' },
   dayText: { fontFamily: fonts.semibold, fontSize: 14 },
-  sheet: { marginHorizontal: 6 },
   sheetContent: { paddingHorizontal: 18, paddingTop: 4, paddingBottom: 24, gap: 16 },
   loading: { marginTop: 24 },
   empty: { textAlign: 'center', marginTop: 8 },

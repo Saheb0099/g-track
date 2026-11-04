@@ -1,25 +1,17 @@
 import { Ionicons } from '@expo/vector-icons';
-import BottomSheet, { BottomSheetScrollView, type BottomSheetBackgroundProps } from '@gorhom/bottom-sheet';
+import BottomSheet, { BottomSheetScrollView } from '@gorhom/bottom-sheet';
 import { BlurTargetView } from 'expo-blur';
 import { router, useFocusEffect } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useCallback, useEffect, useRef, useState, type ComponentRef } from 'react';
-import {
-  ActivityIndicator,
-  BackHandler,
-  Pressable,
-  StyleSheet,
-  Text,
-  useColorScheme,
-  useWindowDimensions,
-  View,
-} from 'react-native';
+import { ActivityIndicator, BackHandler, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Avatar } from '@/components/avatar';
 import { Button } from '@/components/button';
 import { Glass, GlassTarget } from '@/components/glass';
 import { GlassButton } from '@/components/glass-button';
+import { SheetArea, SheetBackground } from '@/components/sheet-background';
 import { MAX_MEMBERS, useMembers, useMyGroups } from '@/features/groups/api';
 import { useCurrentGroup } from '@/features/groups/current-group';
 import { takePendingInvite } from '@/features/groups/pending-invite';
@@ -27,11 +19,12 @@ import { PeoplePanel } from '@/features/home/people-panel';
 import { PersonPanel } from '@/features/home/person-panel';
 import { useLivePositions } from '@/features/map/api';
 import { GroupMap, type GroupMapHandle } from '@/features/map/group-map';
+import { useMapIsDark } from '@/features/map/styles';
 import { useMyProfile } from '@/features/profile/api';
 import { useAuth } from '@/lib/auth';
 import { friendlyError } from '@/lib/errors';
 import { useRefreshOnFocus } from '@/lib/query';
-import { radius, type as typeStyles, useColors } from '@/lib/theme';
+import { type as typeStyles, useColors } from '@/lib/theme';
 
 /** "Updated 3 min ago" labels and faded markers are recomputed this often. */
 const CLOCK_TICK_MS = 30_000;
@@ -39,13 +32,9 @@ const CLOCK_TICK_MS = 30_000;
 const PEOPLE_PEEK = 190;
 const PERSON_PEEK = 300;
 
-function SheetBackground({ style }: BottomSheetBackgroundProps) {
-  return <Glass radius={radius.sheet} style={[style, styles.sheetShadow]} />;
-}
-
 export default function Home() {
   const colors = useColors();
-  const dark = useColorScheme() === 'dark';
+  const darkMap = useMapIsDark();
   const safe = useSafeAreaInsets();
   const { height } = useWindowDimensions();
   const { session } = useAuth();
@@ -134,7 +123,7 @@ export default function Home() {
 
   return (
     <View style={styles.container}>
-      <StatusBar style={dark ? 'light' : 'dark'} />
+      <StatusBar style={darkMap ? 'light' : 'dark'} />
       <BlurTargetView ref={blurTarget} style={StyleSheet.absoluteFill}>
         <GroupMap
           ref={map}
@@ -200,12 +189,18 @@ export default function Home() {
               style={styles.control}>
               <Ionicons name="navigate" size={20} color={colors.accent} />
             </Pressable>
+            <View style={[styles.controlDivider, { backgroundColor: colors.border }]} />
+            <Pressable
+              onPress={() => router.push('/map-style')}
+              accessibilityRole="button"
+              accessibilityLabel="Map style"
+              style={styles.control}>
+              <Ionicons name="layers-outline" size={22} color={colors.text} />
+            </Pressable>
           </Glass>
         </View>
 
-        {/* The sheet lives in an area that stops above Android's navigation bar, so nothing on it
-            can end up behind the bar's buttons; the map shows through below. */}
-        <View style={[StyleSheet.absoluteFill, { bottom: sheetBottom }]} pointerEvents="box-none">
+        <SheetArea bottom={sheetBottom}>
           <BottomSheet
             ref={sheet}
             index={1}
@@ -215,8 +210,7 @@ export default function Home() {
               sheetIndex.current = index;
             }}
             backgroundComponent={SheetBackground}
-            handleIndicatorStyle={{ backgroundColor: colors.fill, width: 40, height: 5 }}
-            style={styles.sheet}>
+            handleIndicatorStyle={{ backgroundColor: colors.fill, width: 40, height: 5 }}>
             <BottomSheetScrollView contentContainerStyle={styles.sheetContent}>
               {groups.isPending ? (
                 <ActivityIndicator style={styles.loading} />
@@ -247,7 +241,7 @@ export default function Home() {
               )}
             </BottomSheetScrollView>
           </BottomSheet>
-        </View>
+        </SheetArea>
       </GlassTarget.Provider>
     </View>
   );
@@ -277,14 +271,6 @@ const styles = StyleSheet.create({
   controls: { position: 'absolute', right: 16 },
   control: { width: 48, height: 48, alignItems: 'center', justifyContent: 'center' },
   controlDivider: { height: StyleSheet.hairlineWidth, marginHorizontal: 10 },
-  sheet: { marginHorizontal: 6 },
-  sheetShadow: {
-    shadowColor: '#0E1116',
-    shadowOpacity: 0.14,
-    shadowRadius: 24,
-    shadowOffset: { width: 0, height: -6 },
-    elevation: 12,
-  },
   sheetContent: { paddingHorizontal: 18, paddingTop: 4, paddingBottom: 24 },
   loading: { marginTop: 24 },
   welcome: { gap: 12 },

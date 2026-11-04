@@ -12,10 +12,12 @@ import { useEffect } from 'react';
 import { LogBox, useColorScheme } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
+import { applySavedTheme } from '@/lib/appearance';
 import { AuthProvider, useAuth } from '@/lib/auth';
 import { QueryProvider } from '@/lib/query';
 
 SplashScreen.preventAutoHideAsync();
+applySavedTheme();
 
 // @gorhom/bottom-sheet passes dependency arrays to Reanimated, which only uses them on the web;
 // the warning is harmless and would otherwise cover the sheet during development.
