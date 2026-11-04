@@ -1,11 +1,41 @@
 import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from 'expo-router';
+import * as SplashScreen from 'expo-splash-screen';
+import { useEffect } from 'react';
 import { useColorScheme } from 'react-native';
 
+import { AuthProvider, useAuth } from '@/lib/auth';
+
+SplashScreen.preventAutoHideAsync();
+
 export default function RootLayout() {
+  return (
+    <AuthProvider>
+      <RootStack />
+    </AuthProvider>
+  );
+}
+
+function RootStack() {
   const colorScheme = useColorScheme();
+  const { session, loading } = useAuth();
+
+  // Keep the splash screen up until we know whether someone is signed in.
+  useEffect(() => {
+    if (!loading) SplashScreen.hideAsync();
+  }, [loading]);
+
+  if (loading) return null;
+
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <Stack />
+      <Stack>
+        <Stack.Protected guard={!session}>
+          <Stack.Screen name="sign-in" options={{ headerShown: false }} />
+        </Stack.Protected>
+        <Stack.Protected guard={!!session}>
+          <Stack.Screen name="index" options={{ title: 'G Track' }} />
+        </Stack.Protected>
+      </Stack>
     </ThemeProvider>
   );
 }
