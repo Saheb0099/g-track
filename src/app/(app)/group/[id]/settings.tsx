@@ -172,18 +172,12 @@ export default function GroupSettings() {
           <View style={styles.row}>
             <Button
               title="Share invite link"
-              style={styles.grow2}
+              style={styles.flex}
               disabled={!invite.data}
               onPress={() => invite.data && shareInvite(groupName, invite.data)}
               icon={<Ionicons name="share-outline" size={18} color={colors.onAccent} />}
             />
-            <Button
-              title="New code"
-              variant="secondary"
-              style={styles.flex}
-              loading={regenerate.isPending}
-              onPress={confirmNewCode}
-            />
+            <Button title="New code" variant="secondary" loading={regenerate.isPending} onPress={confirmNewCode} />
           </View>
         </Card>
       ) : (
@@ -389,7 +383,6 @@ const styles = StyleSheet.create({
   badge: { width: 46, height: 46, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
   close: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
   flex: { flex: 1 },
-  grow2: { flex: 2 },
   invite: { padding: 18, gap: 14 },
   codeRow: { flexDirection: 'row', gap: 6 },
   codeBox: { flex: 1, height: 56, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },

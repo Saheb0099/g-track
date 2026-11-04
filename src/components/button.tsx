@@ -53,7 +53,9 @@ export function Button({ title, onPress, variant = 'primary', loading, disabled,
       ) : (
         <View style={styles.row}>
           {icon}
-          <Text style={[typeStyles.button, size === 'small' && styles.smallText, { color: fg }]}>{title}</Text>
+          <Text style={[typeStyles.button, size === 'small' && styles.smallText, { color: fg }]} numberOfLines={1}>
+            {title}
+          </Text>
         </View>
       )}
     </Pressable>
