@@ -49,11 +49,12 @@ export function PeoplePanel({ group, members, positions, now, meId, onSelect }: 
             </Pressable>
           )}
         </View>
+        {/* Invites, members, location timing and leaving all live in the group's settings. */}
         <Button
-          title={isAdmin ? 'Invite' : 'Group'}
+          title="Group settings"
           size="small"
           onPress={openSettings}
-          icon={<Ionicons name={isAdmin ? 'add' : 'people-outline'} size={18} color={colors.onAccent} />}
+          icon={<Ionicons name="settings-outline" size={17} color={colors.onAccent} />}
         />
       </View>
 

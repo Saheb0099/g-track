@@ -40,7 +40,8 @@ export function MemberRow({ member, position, now, isYou, isAdmin, staleMs, onPr
   const paused = !member.sharingEnabled;
   const right =
     trailing ??
-    (paused ? (
+    // A deleted account is paused too, but its status line already says so.
+    (member.deletedAt ? null : paused ? (
       <View style={[styles.chip, { backgroundColor: colors.fill }]}>
         <Text style={[typeStyles.caption, { color: colors.muted, fontSize: 12 }]}>Paused</Text>
       </View>
