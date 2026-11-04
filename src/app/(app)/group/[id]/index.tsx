@@ -1,15 +1,20 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
-import { useCallback } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
 
 import { Button } from '@/components/button';
 import { useGroup, useMembers } from '@/features/groups/api';
 import { MemberRow } from '@/features/groups/member-row';
+import { useLivePositions } from '@/features/map/api';
+import { GroupMap, type GroupMapHandle } from '@/features/map/group-map';
 import { useAuth } from '@/lib/auth';
 import { friendlyError } from '@/lib/errors';
 import { usePullToRefresh, useRefreshOnFocus } from '@/lib/query';
 import { useColors } from '@/lib/theme';
+
+/** "Updated 3 min ago" labels and faded markers are recomputed this often. */
+const CLOCK_TICK_MS = 30_000;
 
 export default function GroupScreen() {
   const colors = useColors();
@@ -17,12 +22,21 @@ export default function GroupScreen() {
   const { session } = useAuth();
   const group = useGroup(id);
   const members = useMembers(id);
+  const live = useLivePositions(id, members.data?.map((m) => m.userId) ?? []);
+  const map = useRef<GroupMapHandle>(null);
+
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), CLOCK_TICK_MS);
+    return () => clearInterval(timer);
+  }, []);
 
   const { refetch: refetchGroup } = group;
   const { refetch: refetchMembers } = members;
+  const { refetch: refetchLive } = live;
   const refetchAll = useCallback(
-    () => Promise.all([refetchGroup(), refetchMembers()]),
-    [refetchGroup, refetchMembers],
+    () => Promise.all([refetchGroup(), refetchMembers(), refetchLive()]),
+    [refetchGroup, refetchMembers, refetchLive],
   );
   useRefreshOnFocus(refetchAll);
   const pull = usePullToRefresh(refetchAll);
@@ -51,6 +65,7 @@ export default function GroupScreen() {
 
   const adminId = group.data.adminId;
   const alone = members.data?.length === 1;
+  const sharing = new Set((live.data ?? []).map((p) => p.userId));
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -65,6 +80,11 @@ export default function GroupScreen() {
         }}
       />
 
+      {/* Fixed above the list, so dragging the map never scrolls the list. */}
+      <View style={styles.mapArea}>
+        <GroupMap ref={map} positions={live.data ?? []} members={members.data ?? []} now={now} />
+      </View>
+
       <FlatList
         data={members.data ?? []}
         keyExtractor={(m) => m.userId}
@@ -72,10 +92,6 @@ export default function GroupScreen() {
         refreshControl={<RefreshControl refreshing={pull.refreshing} onRefresh={pull.onRefresh} />}
         ListHeaderComponent={
           <View style={styles.header}>
-            <View style={[styles.mapPlaceholder, { borderColor: colors.border }]}>
-              <Ionicons name="map-outline" size={28} color={colors.muted} />
-              <Text style={{ color: colors.muted }}>The live map will appear here.</Text>
-            </View>
             {isAdmin && alone && (
               <View style={[styles.invite, { borderColor: colors.border }]}>
                 <Text style={[styles.inviteTitle, { color: colors.text }]}>Invite your friends</Text>
@@ -89,7 +105,14 @@ export default function GroupScreen() {
           </View>
         }
         renderItem={({ item }) => (
-          <MemberRow member={item} isAdmin={item.userId === adminId} isYou={item.userId === session?.user.id} />
+          <Pressable
+            onPress={() => map.current?.focus(item.userId)}
+            disabled={!sharing.has(item.userId)}
+            accessibilityRole="button"
+            accessibilityHint="Shows this person on the map"
+            style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1 })}>
+            <MemberRow member={item} isAdmin={item.userId === adminId} isYou={item.userId === session?.user.id} />
+          </Pressable>
         )}
         ListEmptyComponent={
           members.isPending ? (
@@ -107,17 +130,9 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12, padding: 24 },
   title: { fontSize: 20, fontWeight: '700', textAlign: 'center' },
+  mapArea: { paddingHorizontal: 16, paddingTop: 12 },
   list: { padding: 16 },
   header: { gap: 16, marginBottom: 4 },
-  mapPlaceholder: {
-    height: 180,
-    borderWidth: 1,
-    borderStyle: 'dashed',
-    borderRadius: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-  },
   invite: { borderWidth: 1, borderRadius: 14, padding: 16, gap: 10 },
   inviteTitle: { fontSize: 17, fontWeight: '700' },
   section: { fontSize: 13, fontWeight: '700', letterSpacing: 0.5 },
