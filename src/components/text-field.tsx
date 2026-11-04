@@ -12,7 +12,11 @@ export function TextField({ label, hint, style, ...input }: Props) {
       <TextInput
         placeholderTextColor={colors.muted}
         {...input}
-        style={[styles.input, { color: colors.text, backgroundColor: colors.surface, borderColor: colors.border }, style]}
+        style={[
+          styles.input,
+          { color: colors.text, backgroundColor: colors.surface, borderColor: colors.border },
+          style,
+        ]}
       />
       {hint && <Text style={[typeStyles.caption, { color: colors.muted, lineHeight: 19 }]}>{hint}</Text>}
     </View>

@@ -34,7 +34,7 @@ export default function EnterCode() {
       />
       {hasLookAlikes(code) && (
         <Text style={[styles.warning, { color: colors.danger }]}>
-          {"Codes never contain 0, O, 1, I or L. Check the letters with your friend."}
+          {'Codes never contain 0, O, 1, I or L. Check the letters with your friend.'}
         </Text>
       )}
       <Button title="Continue" onPress={submit} disabled={!isValidCode(code)} />

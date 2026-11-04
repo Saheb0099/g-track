@@ -38,9 +38,7 @@ const NEIGHBOURS_AGREE_M = 300;
  * back, e.g. an indoor GPS glitch) removed. Real trips don't come straight back.
  */
 export function usable(points: HistoryPoint[]): HistoryPoint[] {
-  const sorted = points
-    .filter((p) => (p.accuracyM ?? 0) <= MAX_USABLE_ACCURACY_M)
-    .sort((a, b) => a.time - b.time);
+  const sorted = points.filter((p) => (p.accuracyM ?? 0) <= MAX_USABLE_ACCURACY_M).sort((a, b) => a.time - b.time);
 
   // Repeat, since a spike can be several points long (each next to another spike point).
   let current = sorted;
