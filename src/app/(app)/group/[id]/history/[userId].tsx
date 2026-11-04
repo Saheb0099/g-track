@@ -1,11 +1,12 @@
 import { Ionicons } from '@expo/vector-icons';
 import BottomSheet, { BottomSheetScrollView, type BottomSheetBackgroundProps } from '@gorhom/bottom-sheet';
 import { BlurTargetView } from 'expo-blur';
-import { router, useLocalSearchParams } from 'expo-router';
+import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { useMemo, useRef, useState, type ComponentRef } from 'react';
+import { useCallback, useMemo, useRef, useState, type ComponentRef } from 'react';
 import {
   ActivityIndicator,
+  BackHandler,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -69,6 +70,20 @@ export default function MemberHistory() {
   const name = member?.displayName ?? '';
   const title = isYou ? 'Your week' : `${name.split(' ')[0] || 'Their'}'s week`;
   const top = safe.top + 12;
+  const sheetBottom = safe.bottom + 8;
+  const sheetArea = height - sheetBottom;
+
+  // Android Back clears a selected place first, then goes back to the map.
+  useFocusEffect(
+    useCallback(() => {
+      const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+        if (!selected) return false;
+        setSelected(null);
+        return true;
+      });
+      return () => sub.remove();
+    }, [selected, setSelected]),
+  );
 
   function pickDay(index: number) {
     setDayIndex(index);
@@ -131,52 +146,55 @@ export default function MemberHistory() {
           </Glass>
         </View>
 
-        <BottomSheet
-          index={1}
-          // The sheet runs under Android's navigation bar; each height adds the bar so content clears it.
-          snapPoints={[170 + safe.bottom, '45%', '88%']}
-          enableDynamicSizing={false}
-          backgroundComponent={SheetBackground}
-          handleIndicatorStyle={{ backgroundColor: colors.fill, width: 40, height: 5 }}
-          style={styles.sheet}>
-          <BottomSheetScrollView contentContainerStyle={[styles.sheetContent, { paddingBottom: safe.bottom + 24 }]}>
-            {history.isPending ? (
-              <ActivityIndicator style={styles.loading} />
-            ) : history.isError ? (
-              <Text style={[typeStyles.body, { color: colors.danger }]}>{friendlyError(history.error)}</Text>
-            ) : points.length === 0 ? (
-              <Text style={[typeStyles.body, styles.empty, { color: colors.muted }]}>
-                No locations were recorded on this day.
-              </Text>
-            ) : (
-              <>
-                <View style={styles.tiles}>
-                  <StatTile label="places" value={String(stays.length)} />
-                  <StatTile label="travelled" value={distance(travelledM(timeline))} />
-                  <StatTile label="first point" value={clock(points[0].time)} />
-                </View>
-                {timeline.length === 0 && (
-                  <Text style={[typeStyles.body, styles.empty, { color: colors.muted }]}>
-                    On the move all day, with no stop of 10 minutes or more.
-                  </Text>
-                )}
-                <View>
-                  {timeline.map((item, i) => (
-                    <TimelineRow
-                      key={`${item.kind}-${item.from}`}
-                      item={item}
-                      index={stays.indexOf(item as Stay) + 1}
-                      first={i === 0}
-                      last={i === timeline.length - 1}
-                      selected={item === selected}
-                      onPress={item.kind === 'stay' ? () => showStay(item) : undefined}
-                    />
-                  ))}
-                </View>
-              </>
-            )}
-          </BottomSheetScrollView>
-        </BottomSheet>
+        {/* Stops above Android's navigation bar, so nothing can sit behind its buttons. */}
+        <View style={[StyleSheet.absoluteFill, { bottom: sheetBottom }]} pointerEvents="box-none">
+          <BottomSheet
+            index={1}
+            // The sheet runs under Android's navigation bar; each height adds the bar so content clears it.
+            snapPoints={[170, Math.round(sheetArea * 0.45), sheetArea - (top + 120)]}
+            enableDynamicSizing={false}
+            backgroundComponent={SheetBackground}
+            handleIndicatorStyle={{ backgroundColor: colors.fill, width: 40, height: 5 }}
+            style={styles.sheet}>
+            <BottomSheetScrollView contentContainerStyle={styles.sheetContent}>
+              {history.isPending ? (
+                <ActivityIndicator style={styles.loading} />
+              ) : history.isError ? (
+                <Text style={[typeStyles.body, { color: colors.danger }]}>{friendlyError(history.error)}</Text>
+              ) : points.length === 0 ? (
+                <Text style={[typeStyles.body, styles.empty, { color: colors.muted }]}>
+                  No locations were recorded on this day.
+                </Text>
+              ) : (
+                <>
+                  <View style={styles.tiles}>
+                    <StatTile label="places" value={String(stays.length)} />
+                    <StatTile label="travelled" value={distance(travelledM(timeline))} />
+                    <StatTile label="first point" value={clock(points[0].time)} />
+                  </View>
+                  {timeline.length === 0 && (
+                    <Text style={[typeStyles.body, styles.empty, { color: colors.muted }]}>
+                      On the move all day, with no stop of 10 minutes or more.
+                    </Text>
+                  )}
+                  <View>
+                    {timeline.map((item, i) => (
+                      <TimelineRow
+                        key={`${item.kind}-${item.from}`}
+                        item={item}
+                        index={stays.indexOf(item as Stay) + 1}
+                        first={i === 0}
+                        last={i === timeline.length - 1}
+                        selected={item === selected}
+                        onPress={item.kind === 'stay' ? () => showStay(item) : undefined}
+                      />
+                    ))}
+                  </View>
+                </>
+              )}
+            </BottomSheetScrollView>
+          </BottomSheet>
+        </View>
       </GlassTarget.Provider>
     </View>
   );
@@ -253,7 +271,7 @@ const styles = StyleSheet.create({
   day: { height: 36, paddingHorizontal: 14, borderRadius: 18, justifyContent: 'center' },
   dayText: { fontFamily: fonts.semibold, fontSize: 14 },
   sheet: { marginHorizontal: 6 },
-  sheetContent: { paddingHorizontal: 18, paddingTop: 4, gap: 16 },
+  sheetContent: { paddingHorizontal: 18, paddingTop: 4, paddingBottom: 24, gap: 16 },
   loading: { marginTop: 24 },
   empty: { textAlign: 'center', marginTop: 8 },
   tiles: { flexDirection: 'row', gap: 8 },

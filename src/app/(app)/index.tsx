@@ -1,10 +1,19 @@
 import { Ionicons } from '@expo/vector-icons';
 import BottomSheet, { BottomSheetScrollView, type BottomSheetBackgroundProps } from '@gorhom/bottom-sheet';
 import { BlurTargetView } from 'expo-blur';
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect, useRef, useState, type ComponentRef } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, useColorScheme, useWindowDimensions, View } from 'react-native';
+import { useCallback, useEffect, useRef, useState, type ComponentRef } from 'react';
+import {
+  ActivityIndicator,
+  BackHandler,
+  Pressable,
+  StyleSheet,
+  Text,
+  useColorScheme,
+  useWindowDimensions,
+  View,
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Avatar } from '@/components/avatar';
@@ -26,7 +35,9 @@ import { radius, type as typeStyles, useColors } from '@/lib/theme';
 
 /** "Updated 3 min ago" labels and faded markers are recomputed this often. */
 const CLOCK_TICK_MS = 30_000;
-const SHEET_PEEK = 200;
+/** Smallest sheet height: enough for the people header and a row, or a person's details. */
+const PEOPLE_PEEK = 190;
+const PERSON_PEEK = 300;
 
 function SheetBackground({ style }: BottomSheetBackgroundProps) {
   return <Glass radius={radius.sheet} style={[style, styles.sheetShadow]} />;
@@ -93,7 +104,33 @@ export default function Home() {
 
   const selected = members.data?.find((m) => m.userId === selectedId);
   const topBar = safe.top + 12;
-  const mapInsets = { top: topBar + 56, bottom: Math.max(SHEET_PEEK, height * 0.42) };
+  // Sheet heights, measured in the area above the navigation bar. The person view needs more
+  // room than the people list; fully open stops just under the top bar.
+  const sheetBottom = safe.bottom + 8;
+  const sheetArea = height - sheetBottom;
+  const snapPoints = [selected ? PERSON_PEEK : PEOPLE_PEEK, Math.round(sheetArea * 0.52), sheetArea - (topBar + 64)];
+  const mapInsets = { top: topBar + 56, bottom: sheetBottom + sheetArea * 0.42 };
+
+  // Android Back steps back through what's open, like other apps: the person view first,
+  // then a fully open sheet, and only then leaves the app.
+  const sheetIndex = useRef(1);
+  useFocusEffect(
+    useCallback(() => {
+      const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+        if (selection.userId && selection.groupId === groupId) {
+          setSelection({ groupId, userId: null });
+          setFollowing({ groupId, userId: null });
+          return true;
+        }
+        if (sheetIndex.current > 1) {
+          sheet.current?.snapToIndex(1);
+          return true;
+        }
+        return false;
+      });
+      return () => sub.remove();
+    }, [selection, groupId]),
+  );
 
   return (
     <View style={styles.container}>
@@ -166,45 +203,51 @@ export default function Home() {
           </Glass>
         </View>
 
-        <BottomSheet
-          ref={sheet}
-          index={1}
-          // The sheet runs under Android's navigation bar; each height adds the bar so content clears it.
-          snapPoints={[SHEET_PEEK + safe.bottom, '52%', '88%']}
-          enableDynamicSizing={false}
-          backgroundComponent={SheetBackground}
-          handleIndicatorStyle={{ backgroundColor: colors.fill, width: 40, height: 5 }}
-          style={styles.sheet}>
-          <BottomSheetScrollView contentContainerStyle={[styles.sheetContent, { paddingBottom: safe.bottom + 24 }]}>
-            {groups.isPending ? (
-              <ActivityIndicator style={styles.loading} />
-            ) : groups.isError ? (
-              <Text style={[typeStyles.body, { color: colors.danger }]}>{friendlyError(groups.error)}</Text>
-            ) : !group ? (
-              <Welcome />
-            ) : selected ? (
-              <PersonPanel
-                groupId={group.id}
-                member={selected}
-                position={positions.find((p) => p.userId === selected.userId)}
-                now={now}
-                isYou={selected.userId === meId}
-                following={followId === selected.userId}
-                onToggleFollow={() => setFollowId(followId === selected.userId ? null : selected.userId)}
-                onClose={() => select(null)}
-              />
-            ) : (
-              <PeoplePanel
-                group={group}
-                members={members.data ?? []}
-                positions={positions}
-                now={now}
-                meId={meId}
-                onSelect={select}
-              />
-            )}
-          </BottomSheetScrollView>
-        </BottomSheet>
+        {/* The sheet lives in an area that stops above Android's navigation bar, so nothing on it
+            can end up behind the bar's buttons; the map shows through below. */}
+        <View style={[StyleSheet.absoluteFill, { bottom: sheetBottom }]} pointerEvents="box-none">
+          <BottomSheet
+            ref={sheet}
+            index={1}
+            snapPoints={snapPoints}
+            enableDynamicSizing={false}
+            onChange={(index) => {
+              sheetIndex.current = index;
+            }}
+            backgroundComponent={SheetBackground}
+            handleIndicatorStyle={{ backgroundColor: colors.fill, width: 40, height: 5 }}
+            style={styles.sheet}>
+            <BottomSheetScrollView contentContainerStyle={styles.sheetContent}>
+              {groups.isPending ? (
+                <ActivityIndicator style={styles.loading} />
+              ) : groups.isError ? (
+                <Text style={[typeStyles.body, { color: colors.danger }]}>{friendlyError(groups.error)}</Text>
+              ) : !group ? (
+                <Welcome />
+              ) : selected ? (
+                <PersonPanel
+                  groupId={group.id}
+                  member={selected}
+                  position={positions.find((p) => p.userId === selected.userId)}
+                  now={now}
+                  isYou={selected.userId === meId}
+                  following={followId === selected.userId}
+                  onToggleFollow={() => setFollowId(followId === selected.userId ? null : selected.userId)}
+                  onClose={() => select(null)}
+                />
+              ) : (
+                <PeoplePanel
+                  group={group}
+                  members={members.data ?? []}
+                  positions={positions}
+                  now={now}
+                  meId={meId}
+                  onSelect={select}
+                />
+              )}
+            </BottomSheetScrollView>
+          </BottomSheet>
+        </View>
       </GlassTarget.Provider>
     </View>
   );
@@ -242,7 +285,7 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: -6 },
     elevation: 12,
   },
-  sheetContent: { paddingHorizontal: 18, paddingTop: 4 },
+  sheetContent: { paddingHorizontal: 18, paddingTop: 4, paddingBottom: 24 },
   loading: { marginTop: 24 },
   welcome: { gap: 12 },
 });

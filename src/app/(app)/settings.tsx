@@ -1,43 +1,64 @@
-import { Ionicons } from '@expo/vector-icons';
-import { router } from 'expo-router';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Ionicons } from "@expo/vector-icons";
+import { router } from "expo-router";
+import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { Avatar } from '@/components/avatar';
-import { Button } from '@/components/button';
-import { Card, SectionLabel } from '@/components/card';
-import { useSharingStatus } from '@/features/location/sharing-status';
-import { useMyProfile } from '@/features/profile/api';
-import { signOut, useAuth } from '@/lib/auth';
-import { type as typeStyles, useColors } from '@/lib/theme';
+import { Avatar } from "@/components/avatar";
+import { Button } from "@/components/button";
+import { Card, SectionLabel } from "@/components/card";
+import { useSharingStatus } from "@/features/location/sharing-status";
+import { useMyProfile } from "@/features/profile/api";
+import { signOut, useAuth } from "@/lib/auth";
+import { type as typeStyles, useColors } from "@/lib/theme";
 
 export default function Settings() {
+  // Edge-to-edge: keep the last item clear of Android's navigation bar.
+  const safe = useSafeAreaInsets();
   const colors = useColors();
   const { session } = useAuth();
   const profile = useMyProfile();
   const status = useSharingStatus();
-  const name = profile.data?.display_name ?? '';
+  const name = profile.data?.display_name ?? "";
 
   return (
-    <ScrollView style={{ backgroundColor: colors.background }} contentContainerStyle={styles.container}>
+    <ScrollView
+      style={{ backgroundColor: colors.background }}
+      contentContainerStyle={[
+        styles.container,
+        { paddingBottom: safe.bottom + 32 },
+      ]}
+    >
       <View style={styles.profile}>
-        <Avatar name={name || '?'} uri={profile.data?.avatar_url} size={80} />
+        <Avatar name={name || "?"} uri={profile.data?.avatar_url} size={80} />
         <Text style={[typeStyles.title, { color: colors.text }]}>{name}</Text>
-        <Text style={[typeStyles.caption, { color: colors.muted, fontSize: 14 }]}>{session?.user.email}</Text>
+        <Text
+          style={[typeStyles.caption, { color: colors.muted, fontSize: 14 }]}
+        >
+          {session?.user.email}
+        </Text>
       </View>
 
       <View style={styles.section}>
         <SectionLabel>Location</SectionLabel>
         <Card>
           <Pressable
-            onPress={() => router.push('/setup')}
+            onPress={() => router.push("/setup")}
             accessibilityRole="button"
-            style={({ pressed }) => [styles.row, { opacity: pressed ? 0.6 : 1 }]}>
+            style={({ pressed }) => [
+              styles.row,
+              { opacity: pressed ? 0.6 : 1 },
+            ]}
+          >
             <View style={[styles.icon, { backgroundColor: colors.accentFill }]}>
               <Ionicons name="navigate" size={18} color={colors.accent} />
             </View>
             <View style={styles.flex}>
-              <Text style={[typeStyles.bodyStrong, { color: colors.text }]}>Location sharing</Text>
-              <Text style={[typeStyles.caption, { color: colors.muted }]}>{status?.label ?? 'Checking…'}</Text>
+              <Text style={[typeStyles.bodyStrong, { color: colors.text }]}>
+                Location sharing
+              </Text>
+              <Text style={[typeStyles.caption, { color: colors.muted }]}>
+                {status?.label ?? "Checking…"}
+              </Text>
             </View>
             <Ionicons name="chevron-forward" size={18} color={colors.muted} />
           </Pressable>
@@ -51,9 +72,22 @@ export default function Settings() {
 
 const styles = StyleSheet.create({
   container: { padding: 16, gap: 24, paddingBottom: 48 },
-  profile: { alignItems: 'center', gap: 6, paddingVertical: 12 },
+  profile: { alignItems: "center", gap: 6, paddingVertical: 12 },
   section: { gap: 8 },
-  row: { minHeight: 64, flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 14, paddingVertical: 10 },
-  icon: { width: 36, height: 36, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+  row: {
+    minHeight: 64,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  icon: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   flex: { flex: 1, gap: 2 },
 });

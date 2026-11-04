@@ -1,18 +1,31 @@
-import { Ionicons } from '@expo/vector-icons';
-import { router } from 'expo-router';
-import { Fragment } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Ionicons } from "@expo/vector-icons";
+import { router } from "expo-router";
+import { Fragment } from "react";
+import {
+  ActivityIndicator,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { Button } from '@/components/button';
-import { Card, RowDivider, SectionLabel } from '@/components/card';
-import { MAX_MEMBERS, useMyGroups } from '@/features/groups/api';
-import { setCurrentGroup, useCurrentGroup } from '@/features/groups/current-group';
-import { useAuth } from '@/lib/auth';
-import { friendlyError } from '@/lib/errors';
-import { type as typeStyles, useColors } from '@/lib/theme';
+import { Button } from "@/components/button";
+import { Card, RowDivider, SectionLabel } from "@/components/card";
+import { MAX_MEMBERS, useMyGroups } from "@/features/groups/api";
+import {
+  setCurrentGroup,
+  useCurrentGroup,
+} from "@/features/groups/current-group";
+import { useAuth } from "@/lib/auth";
+import { friendlyError } from "@/lib/errors";
+import { type as typeStyles, useColors } from "@/lib/theme";
 
 /** Pick which group the map shows, or start a new one. */
 export default function Groups() {
+  // Edge-to-edge: keep the last item clear of Android's navigation bar.
+  const safe = useSafeAreaInsets();
   const colors = useColors();
   const { session } = useAuth();
   const groups = useMyGroups();
@@ -24,11 +37,19 @@ export default function Groups() {
   }
 
   return (
-    <ScrollView style={{ backgroundColor: colors.background }} contentContainerStyle={styles.container}>
+    <ScrollView
+      style={{ backgroundColor: colors.background }}
+      contentContainerStyle={[
+        styles.container,
+        { paddingBottom: safe.bottom + 32 },
+      ]}
+    >
       {groups.isPending ? (
         <ActivityIndicator />
       ) : groups.isError ? (
-        <Text style={[typeStyles.body, { color: colors.danger }]}>{friendlyError(groups.error)}</Text>
+        <Text style={[typeStyles.body, { color: colors.danger }]}>
+          {friendlyError(groups.error)}
+        </Text>
       ) : groups.data.length > 0 ? (
         <View style={styles.section}>
           <SectionLabel>Groups</SectionLabel>
@@ -42,23 +63,54 @@ export default function Groups() {
                     onPress={() => open(g.id)}
                     accessibilityRole="button"
                     accessibilityState={{ selected: active }}
-                    style={({ pressed }) => [styles.row, { opacity: pressed ? 0.6 : 1 }]}>
-                    <View style={[styles.badge, { backgroundColor: active ? colors.accent : colors.fill }]}>
+                    style={({ pressed }) => [
+                      styles.row,
+                      { opacity: pressed ? 0.6 : 1 },
+                    ]}
+                  >
+                    <View
+                      style={[
+                        styles.badge,
+                        {
+                          backgroundColor: active ? colors.accent : colors.fill,
+                        },
+                      ]}
+                    >
                       <Text
-                        style={[typeStyles.bodyStrong, { color: active ? colors.onAccent : colors.text, fontSize: 15 }]}>
+                        style={[
+                          typeStyles.bodyStrong,
+                          {
+                            color: active ? colors.onAccent : colors.text,
+                            fontSize: 15,
+                          },
+                        ]}
+                      >
                         {g.name[0].toUpperCase()}
                       </Text>
                     </View>
                     <View style={styles.flex}>
-                      <Text style={[typeStyles.bodyStrong, { color: colors.text }]} numberOfLines={1}>
+                      <Text
+                        style={[typeStyles.bodyStrong, { color: colors.text }]}
+                        numberOfLines={1}
+                      >
                         {g.name}
                       </Text>
-                      <Text style={[typeStyles.caption, { color: colors.muted }]}>
+                      <Text
+                        style={[typeStyles.caption, { color: colors.muted }]}
+                      >
                         {g.memberCount} of {MAX_MEMBERS} members
-                        {g.adminId === session?.user.id ? ' · You are admin' : ''}
+                        {g.adminId === session?.user.id
+                          ? " · You are admin"
+                          : ""}
                       </Text>
                     </View>
-                    {active && <Ionicons name="checkmark-circle" size={24} color={colors.accent} />}
+                    {active && (
+                      <Ionicons
+                        name="checkmark-circle"
+                        size={24}
+                        color={colors.accent}
+                      />
+                    )}
                   </Pressable>
                 </Fragment>
               );
@@ -66,16 +118,22 @@ export default function Groups() {
           </Card>
         </View>
       ) : (
-        <Text style={[typeStyles.body, { color: colors.muted }]}>You aren&apos;t in any groups yet.</Text>
+        <Text style={[typeStyles.body, { color: colors.muted }]}>
+          You aren&apos;t in any groups yet.
+        </Text>
       )}
 
       <View style={styles.actions}>
         <Button
           title="Create a group"
-          onPress={() => router.push('/create-group')}
+          onPress={() => router.push("/create-group")}
           icon={<Ionicons name="add" size={20} color={colors.onAccent} />}
         />
-        <Button title="Join with a code" variant="secondary" onPress={() => router.push('/join')} />
+        <Button
+          title="Join with a code"
+          variant="secondary"
+          onPress={() => router.push("/join")}
+        />
       </View>
     </ScrollView>
   );
@@ -84,8 +142,20 @@ export default function Groups() {
 const styles = StyleSheet.create({
   container: { padding: 16, gap: 24, paddingBottom: 48 },
   section: { gap: 8 },
-  row: { minHeight: 68, flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 14 },
-  badge: { width: 38, height: 38, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  row: {
+    minHeight: 68,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    paddingHorizontal: 14,
+  },
+  badge: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   flex: { flex: 1, gap: 2 },
   actions: { gap: 10 },
 });
