@@ -20,6 +20,7 @@ export default function AppLayout() {
       <Stack.Screen name="join/[code]" options={{ title: 'Join a group' }} />
       <Stack.Screen name="group/[id]/index" options={{ title: '' }} />
       <Stack.Screen name="group/[id]/settings" options={{ title: 'Group settings' }} />
+      <Stack.Screen name="group/[id]/history/[userId]" options={{ title: 'History' }} />
     </Stack>
   );
 }

@@ -111,7 +111,23 @@ export default function GroupScreen() {
             accessibilityRole="button"
             accessibilityHint="Shows this person on the map"
             style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1 })}>
-            <MemberRow member={item} isAdmin={item.userId === adminId} isYou={item.userId === session?.user.id} />
+            <MemberRow
+              member={item}
+              isAdmin={item.userId === adminId}
+              isYou={item.userId === session?.user.id}
+              action={
+                // History stays visible while someone has sharing paused, so this is always offered.
+                <Pressable
+                  onPress={() =>
+                    router.push({ pathname: '/group/[id]/history/[userId]', params: { id, userId: item.userId } })
+                  }
+                  hitSlop={12}
+                  accessibilityLabel={`${item.displayName}'s history`}
+                  style={[styles.historyButton, { borderColor: colors.border }]}>
+                  <Ionicons name="time-outline" size={18} color={colors.text} />
+                </Pressable>
+              }
+            />
           </Pressable>
         )}
         ListEmptyComponent={
@@ -136,4 +152,12 @@ const styles = StyleSheet.create({
   invite: { borderWidth: 1, borderRadius: 14, padding: 16, gap: 10 },
   inviteTitle: { fontSize: 17, fontWeight: '700' },
   section: { fontSize: 13, fontWeight: '700', letterSpacing: 0.5 },
+  historyButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
 });

@@ -21,10 +21,11 @@ export const LOCATION_TASK = 'gtrack-location';
 export const HEARTBEAT_TASK = 'gtrack-heartbeat';
 const HEARTBEAT_MINUTES = 15;
 
-// Readings about once a minute at "balanced" power: Android's fused provider picks GPS,
-// Wi-Fi or cell towers, whichever is available. The save rule then thins them out.
+// Readings about once a minute at high accuracy: Android's fused provider uses GPS when it has
+// a signal and falls back to Wi-Fi and cell towers when not (indoors). Accuracy over battery,
+// as the user chose. The save rule then thins the readings out.
 const UPDATE_OPTIONS: Location.LocationTaskOptions = {
-  accuracy: Location.Accuracy.Balanced,
+  accuracy: Location.Accuracy.High,
   timeInterval: 60_000,
   distanceInterval: 0,
   // Never wait on a "turn on location" dialog: there may be no screen to show it on.
@@ -40,7 +41,14 @@ const UPDATE_OPTIONS: Location.LocationTaskOptions = {
 
 /** A cached fix is used when a fresh one fails, if it's at most this old. */
 const LAST_KNOWN_MAX_AGE_MS = 15 * 60_000;
-const CURRENT_FIX_TIMEOUT_MS = 20_000;
+/**
+ * A fresh fix is tried best source first: GPS-quality, then Wi-Fi/cell. Each gets this long;
+ * a GPS fix can take a while to arrive, a network fix is quick.
+ */
+const FRESH_FIX_ATTEMPTS: { accuracy: Location.Accuracy; timeoutMs: number; label: string }[] = [
+  { accuracy: Location.Accuracy.High, timeoutMs: 18_000, label: 'gps' },
+  { accuracy: Location.Accuracy.Balanced, timeoutMs: 8_000, label: 'network' },
+];
 /** A "current" fix older than this was really a cached one. */
 const STALE_FIX_MS = 60_000;
 /**
@@ -49,10 +57,11 @@ const STALE_FIX_MS = 60_000;
  */
 const SERVICE_SILENT_MS = 3 * 60_000;
 // Time limits for each check-in step; together they stay under the 60 s the alarm's
-// background task is allowed. Saving a point needs the most: a fresh fix can take 20 s.
-const POINT_STEP_MS = 30_000;
+// background task is allowed. Saving a point needs the most: both fresh-fix attempts (26 s)
+// plus the cached fallback.
+const POINT_STEP_MS = 32_000;
 const START_STEP_MS = 10_000;
-const UPLOAD_STEP_MS = 15_000;
+const UPLOAD_STEP_MS = 12_000;
 
 export type Readiness = {
   foreground: boolean;
@@ -119,29 +128,45 @@ export async function recordReading(
   return true;
 }
 
+/** One fresh-fix attempt; null if it fails or runs out of time. */
+async function freshFix(accuracy: Location.Accuracy, timeoutMs: number, label: string) {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    const fix = await Promise.race([
+      Location.getCurrentPositionAsync({ accuracy, mayShowUserSettingsDialog: false }),
+      new Promise<null>((resolve) => {
+        timer = setTimeout(() => resolve(null), timeoutMs);
+      }),
+    ]);
+    if (!fix) await logEvent(`${label} fix timed out`);
+    return fix;
+  } catch (e) {
+    await logEvent(`${label} fix failed: ${e instanceof Error ? e.message : String(e)}`);
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 /**
- * Saves a point right now: a fresh fix if possible, otherwise a cached one.
+ * Saves a point right now, from the best source that answers: a GPS-quality fix, then a
+ * Wi-Fi/cell fix, then the phone's last known fix.
  * With `stillHere`, a cached fix of any age is re-sent with the current time: Google's provider
  * stops producing fixes while the phone lies still, so the last fix is where the phone still is.
  */
 export async function recordCurrentPosition(options: { stillHere?: boolean } = {}) {
-  try {
-    const fresh = await Promise.race([
-      Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced, mayShowUserSettingsDialog: false }),
-      new Promise<null>((resolve) => setTimeout(() => resolve(null), CURRENT_FIX_TIMEOUT_MS)),
-    ]);
-    if (fresh) {
-      // While the phone is still, Android can answer with its previous fix. When a point is due,
-      // that's still where the phone is, so it's saved as of now rather than skipped as a repeat.
-      const stale = Date.now() - fresh.timestamp > STALE_FIX_MS;
-      const reading = options.stillHere && stale ? { ...fresh, timestamp: Date.now() } : fresh;
-      const saved = await recordReading(reading, { force: true, source: stale ? 'last_known' : 'fused' });
-      await logEvent(`current fix ±${Math.round(fresh.coords.accuracy ?? 0)}m stale=${stale} saved=${saved}`);
-      return;
-    }
-    await logEvent('current fix timed out');
-  } catch (e) {
-    await logEvent(`current fix failed: ${e instanceof Error ? e.message : String(e)}`);
+  for (const attempt of FRESH_FIX_ATTEMPTS) {
+    const fresh = await freshFix(attempt.accuracy, attempt.timeoutMs, attempt.label);
+    if (!fresh) continue;
+    // While the phone is still, Android can answer with its previous fix. When a point is due,
+    // that's still where the phone is, so it's saved as of now rather than skipped as a repeat.
+    const stale = Date.now() - fresh.timestamp > STALE_FIX_MS;
+    const reading = options.stillHere && stale ? { ...fresh, timestamp: Date.now() } : fresh;
+    const saved = await recordReading(reading, { force: true, source: stale ? 'last_known' : 'fused' });
+    await logEvent(
+      `${attempt.label} fix ±${Math.round(fresh.coords.accuracy ?? 0)}m stale=${stale} saved=${saved}`,
+    );
+    return;
   }
 
   const cached = await Location.getLastKnownPositionAsync(options.stillHere ? {} : { maxAge: LAST_KNOWN_MAX_AGE_MS });
