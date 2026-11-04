@@ -30,7 +30,7 @@ TaskManager.defineTask<{ locations: LocationObject[] }>(LOCATION_TASK, async ({ 
   const readings = [...data.locations].sort((a, b) => a.timestamp - b.timestamp);
   let saved = 0;
   for (const reading of readings) {
-    if (await recordReading(reading, { battery })) saved++;
+    if ((await recordReading(reading, { battery })).saved) saved++;
   }
   await logEvent(`location task: ${readings.length} reading(s), ${saved} saved`);
 

@@ -6,7 +6,7 @@ import * as TaskManager from 'expo-task-manager';
 import GtrackAlarm from '../../../modules/gtrack-alarm';
 
 import { clearAll, enqueue, getState, logEvent, setState, type PendingPoint } from '@/features/location/queue';
-import { SAVE_DUE_MS, SAVE_EVERY_MS, shouldSave, type Fix } from '@/features/location/rules';
+import { judgeFix, SAVE_DUE_MS, SAVE_EVERY_MS, shouldSave, type Fix, type Verdict } from '@/features/location/rules';
 import { reportStatus, type DeviceStatus } from '@/features/location/status';
 import { flushQueue } from '@/features/location/upload';
 
@@ -106,26 +106,61 @@ function toPoint(location: Location.LocationObject, source: PendingPoint['source
   };
 }
 
-/** Applies the save rule to one reading and queues it if it should be kept. Returns whether it was saved. */
+/**
+ * Checks a reading is believable, applies the save rule, and queues it if it should be kept.
+ * `verdict` says whether the reading was believed at all (see judgeFix).
+ */
 export async function recordReading(
   location: Location.LocationObject,
   options: { source?: PendingPoint['source']; force?: boolean; battery?: number | null } = {},
-): Promise<boolean> {
+): Promise<{ saved: boolean; verdict: Verdict }> {
   const fix: Fix = {
     lat: location.coords.latitude,
     lng: location.coords.longitude,
     time: location.timestamp,
     accuracy: location.coords.accuracy,
   };
+
+  const [lastGood, held] = await Promise.all([getState<Fix>('last_good'), getState<Fix>('held_jump')]);
+  const { verdict, reason } = judgeFix(lastGood, held, fix);
+  if (verdict !== 'accept') {
+    if (verdict === 'hold') await setState('held_jump', fix);
+    await logEvent(`${verdict} fix: ${reason}`);
+    return { saved: false, verdict };
+  }
+  await setState('last_good', fix);
+  if (held) await setState('held_jump', null);
+
   const last = await getState<Fix>('last_saved');
   // A forced save (the app was just opened) still skips a reading within a minute of the last one.
   const keep = options.force ? !last || fix.time - last.time >= 60_000 : shouldSave(last, fix);
-  if (!keep) return false;
+  if (!keep) return { saved: false, verdict };
 
   const battery = options.battery !== undefined ? options.battery : await batteryPercent();
   await enqueue(toPoint(location, options.source ?? 'fused', battery));
   await setState('last_saved', fix);
-  return true;
+  return { saved: true, verdict };
+}
+
+/** Re-sends the last believable position with the current time ("still here"). */
+async function recordLastGood(): Promise<boolean> {
+  const good = await getState<Fix>('last_good');
+  if (!good) return false;
+  const reading: Location.LocationObject = {
+    timestamp: Date.now(),
+    coords: {
+      latitude: good.lat,
+      longitude: good.lng,
+      accuracy: good.accuracy ?? null,
+      altitude: null,
+      altitudeAccuracy: null,
+      heading: null,
+      speed: null,
+    },
+  };
+  const { saved } = await recordReading(reading, { force: true, source: 'last_known' });
+  await logEvent(`re-sent last good position saved=${saved}`);
+  return saved;
 }
 
 /** One fresh-fix attempt; null if it fails or runs out of time. */
@@ -162,21 +197,26 @@ export async function recordCurrentPosition(options: { stillHere?: boolean } = {
     // that's still where the phone is, so it's saved as of now rather than skipped as a repeat.
     const stale = Date.now() - fresh.timestamp > STALE_FIX_MS;
     const reading = options.stillHere && stale ? { ...fresh, timestamp: Date.now() } : fresh;
-    const saved = await recordReading(reading, { force: true, source: stale ? 'last_known' : 'fused' });
+    const { saved, verdict } = await recordReading(reading, { force: true, source: stale ? 'last_known' : 'fused' });
     await logEvent(
-      `${attempt.label} fix ±${Math.round(fresh.coords.accuracy ?? 0)}m stale=${stale} saved=${saved}`,
+      `${attempt.label} fix ±${Math.round(fresh.coords.accuracy ?? 0)}m stale=${stale} ${verdict} saved=${saved}`,
     );
-    return;
+    // An unbelievable fix (e.g. an indoor GPS glitch): try the next source instead.
+    if (verdict === 'accept') return;
   }
 
   const cached = await Location.getLastKnownPositionAsync(options.stillHere ? {} : { maxAge: LAST_KNOWN_MAX_AGE_MS });
-  if (!cached) {
+  if (cached) {
+    const reading = options.stillHere ? { ...cached, timestamp: Date.now() } : cached;
+    const { saved, verdict } = await recordReading(reading, { source: 'last_known', force: true });
+    await logEvent(`cached fix from ${new Date(cached.timestamp).toISOString()} ${verdict} saved=${saved}`);
+    if (verdict === 'accept') return;
+  } else {
     await logEvent('no cached fix');
-    return;
   }
-  const reading = options.stillHere ? { ...cached, timestamp: Date.now() } : cached;
-  const saved = await recordReading(reading, { source: 'last_known', force: true });
-  await logEvent(`cached fix from ${new Date(cached.timestamp).toISOString()} saved=${saved}`);
+
+  // Nothing believable from the phone: the 5-minute point repeats the last good position.
+  if (options.stillHere) await recordLastGood();
 }
 
 /** Called with the app on screen. */

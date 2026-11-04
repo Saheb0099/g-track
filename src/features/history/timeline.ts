@@ -29,10 +29,36 @@ export function distanceM(a: { lat: number; lng: number }, b: { lat: number; lng
   return 2 * R * Math.asin(Math.sqrt(h));
 }
 
+/** A point this far from both neighbours, while they agree with each other, is a glitch. */
+const SPIKE_M = 1000;
+const NEIGHBOURS_AGREE_M = 300;
+
+/**
+ * Points fit to draw and measure: rough fixes dropped, and spikes (a jump out and straight
+ * back, e.g. an indoor GPS glitch) removed. Real trips don't come straight back.
+ */
 export function usable(points: HistoryPoint[]): HistoryPoint[] {
-  return points
+  const sorted = points
     .filter((p) => (p.accuracyM ?? 0) <= MAX_USABLE_ACCURACY_M)
     .sort((a, b) => a.time - b.time);
+
+  // Repeat, since a spike can be several points long (each next to another spike point).
+  let current = sorted;
+  for (let pass = 0; pass < 3; pass++) {
+    const kept = current.filter((p, i) => {
+      const prev = current[i - 1];
+      const next = current[i + 1];
+      if (!prev || !next) return true;
+      return !(
+        distanceM(prev, p) > SPIKE_M &&
+        distanceM(p, next) > SPIKE_M &&
+        distanceM(prev, next) <= NEIGHBOURS_AGREE_M
+      );
+    });
+    if (kept.length === current.length) break;
+    current = kept;
+  }
+  return current;
 }
 
 function pathLength(points: HistoryPoint[]): number {
