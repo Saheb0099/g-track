@@ -41,9 +41,15 @@ export function useSetSharing() {
       const { error } = await supabase.from('profiles').update({ sharing_enabled: enabled }).eq('id', userId!);
       if (error) throw error;
     },
-    // Flip the switch at once; a failure puts it back.
+    // Flip the switch at once; a failure puts it back. Restored from memory, not by re-reading
+    // the server, which fails too when offline and would leave the phone paused on its own.
     onMutate: (enabled) => {
+      const before = client.getQueryData<Profile>(key);
       client.setQueryData<Profile>(key, (p) => p && { ...p, sharing_enabled: enabled });
+      return { before };
+    },
+    onError: (_error, _enabled, context) => {
+      if (context?.before) client.setQueryData<Profile>(key, context.before);
     },
     onSettled: () => client.invalidateQueries({ queryKey: key }),
   });

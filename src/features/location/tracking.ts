@@ -1,3 +1,4 @@
+import { isAuthApiError } from '@supabase/supabase-js';
 import * as BackgroundTask from 'expo-background-task';
 import * as Battery from 'expo-battery';
 import * as Location from 'expo-location';
@@ -75,9 +76,10 @@ const SERVICE_SILENT_GRACE_MS = 2 * 60_000;
 // Time limits for each check-in step; together they stay under the 60 s the alarm's
 // background task is allowed. Saving a point needs the most: both fresh-fix attempts (26 s)
 // plus the cached fallback.
+const ALLOWED_STEP_MS = 5_000;
 const POINT_STEP_MS = 32_000;
 const START_STEP_MS = 10_000;
-const UPLOAD_STEP_MS = 12_000;
+const UPLOAD_STEP_MS = 11_000;
 
 export type Readiness = {
   foreground: boolean;
@@ -324,6 +326,26 @@ export async function stopTracking() {
  * if the system stopped it, save a point if one is due, then upload.
  */
 export async function checkIn(reason: 'alarm' | 'heartbeat') {
+  // First make sure this phone should still be sharing at all (see sharingAllowed).
+  const check = { allowed: 'unknown' as Allowed };
+  await withTimeout(
+    sharingAllowed().then((allowed) => {
+      check.allowed = allowed;
+    }),
+    ALLOWED_STEP_MS,
+    `${reason}: checking sign-in`,
+  );
+  if (check.allowed === 'signed_out') {
+    await logEvent(`${reason}: signed out; stopping and clearing unsent points`);
+    await resetTracking();
+    return;
+  }
+  if (check.allowed === 'paused') {
+    await logEvent(`${reason}: sharing is paused on the server; stopping`);
+    await stopTracking();
+    return;
+  }
+
   const schedule = await getSchedule();
   const last = await getState<Fix>('last_saved');
   const due = !last || Date.now() - last.time >= saveDueMs(schedule);
@@ -359,6 +381,31 @@ export async function checkIn(reason: 'alarm' | 'heartbeat') {
 
   // An admin's new timing reaches every phone here, within 5 minutes.
   await withTimeout(Promise.all([flushQueue(), applyNewSchedule()]), UPLOAD_STEP_MS, `${reason}: upload`);
+}
+
+type Allowed = 'yes' | 'signed_out' | 'paused' | 'unknown';
+
+/**
+ * Whether this phone should still be sharing, as far as the server says. A phone can lose its
+ * sign-in (signed out or deleted on another phone) or be paused from another phone on the same
+ * account while G Track is closed, and nothing else would stop it: the alarm and notification
+ * would carry on, with nothing able to upload. Offline it's 'unknown', and nothing changes.
+ */
+async function sharingAllowed(): Promise<Allowed> {
+  const { data, error } = await supabase.auth.getSession();
+  // Only the server turning the sign-in down (a 4xx, e.g. the refresh token was revoked) means
+  // signed out. Offline, or a passing server problem, an expired token just can't be refreshed yet.
+  if (error) return isAuthApiError(error) && error.status >= 400 && error.status < 500 ? 'signed_out' : 'unknown';
+  if (!data.session) return 'signed_out';
+  const profile = await supabase
+    .from('profiles')
+    .select('sharing_enabled')
+    .eq('id', data.session.user.id)
+    .maybeSingle();
+  if (profile.error) return 'unknown';
+  // No profile: the account was removed.
+  if (!profile.data) return 'signed_out';
+  return profile.data.sharing_enabled ? 'yes' : 'paused';
 }
 
 /** Picks up a changed group timing and restarts location checks at the new pace. */
