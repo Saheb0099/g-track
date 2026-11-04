@@ -102,20 +102,22 @@ export default function GroupSettings() {
   }
 
   function memberActions(member: Member) {
+    const makeAdmin = {
+      text: 'Make admin',
+      onPress: () =>
+        Alert.alert(
+          `Make ${member.displayName} admin?`,
+          "You'll stop being admin. Only the admin can invite and remove people.",
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Make admin', onPress: () => transfer.mutate(member.userId, { onError: showError }) },
+          ],
+        ),
+    };
     Alert.alert(member.displayName, undefined, [
       { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Make admin',
-        onPress: () =>
-          Alert.alert(
-            `Make ${member.displayName} admin?`,
-            "You'll stop being admin. Only the admin can invite and remove people.",
-            [
-              { text: 'Cancel', style: 'cancel' },
-              { text: 'Make admin', onPress: () => transfer.mutate(member.userId, { onError: showError }) },
-            ],
-          ),
-      },
+      // An account being deleted is signed out and couldn't act as admin.
+      ...(member.deletedAt ? [] : [makeAdmin]),
       {
         text: 'Remove',
         style: 'destructive',

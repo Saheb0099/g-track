@@ -7,6 +7,7 @@ const MESSAGES: Record<string, string> = {
   cannot_kick_self: "You can't remove yourself. Use Leave group instead.",
   not_authenticated: 'Please sign in again.',
   groups_name_check: 'Group names need 1 to 40 characters.',
+  member_leaving: "That person's account is being deleted, so they can't be admin.",
   group_closing: "This group is being deleted, so it can't take new members.",
 };
 

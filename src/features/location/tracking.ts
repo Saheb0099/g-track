@@ -399,13 +399,14 @@ async function sharingAllowed(): Promise<Allowed> {
   if (!data.session) return 'signed_out';
   const profile = await supabase
     .from('profiles')
-    .select('sharing_enabled')
+    .select('sharing_enabled, deleted_at')
     .eq('id', data.session.user.id)
     .maybeSingle();
   if (profile.error) return 'unknown';
   // No profile: the account was removed.
   if (!profile.data) return 'signed_out';
-  return profile.data.sharing_enabled ? 'yes' : 'paused';
+  // Deleted on another phone: its sign-in here still works for the 7 days, but it shouldn't share.
+  return profile.data.sharing_enabled && !profile.data.deleted_at ? 'yes' : 'paused';
 }
 
 /** Picks up a changed group timing and restarts location checks at the new pace. */

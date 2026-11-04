@@ -37,7 +37,8 @@ type Props = {
 /** A person in a list: avatar, name, live status and battery. */
 export function MemberRow({ member, position, now, isYou, isAdmin, staleMs, onPress, trailing }: Props) {
   const colors = useColors();
-  const paused = !member.sharingEnabled;
+  // A deleted account's live position is hidden too, whatever its sharing switch says.
+  const paused = !member.sharingEnabled || !!member.deletedAt;
   const right =
     trailing ??
     // A deleted account is paused too, but its status line already says so.

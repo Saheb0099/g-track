@@ -72,7 +72,12 @@ export function PersonPanel({
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Avatar name={member.displayName} uri={member.avatarUrl} size={58} dim={!member.sharingEnabled} />
+        <Avatar
+          name={member.displayName}
+          uri={member.avatarUrl}
+          size={58}
+          dim={!member.sharingEnabled || !!member.deletedAt}
+        />
         <View style={styles.headerText}>
           <Text style={[typeStyles.title, { color: colors.text }]} numberOfLines={1}>
             {isYou ? 'You' : member.displayName.split(' ')[0]}

@@ -279,6 +279,12 @@ select is(public.restore_my_account(), true, 'Signing in again cancels the delet
 select is((select deleted_at from public.profiles where id = tests.uid('bob')), null,
   'A restored account is no longer marked');
 select is(public.restore_my_account(), false, 'Nothing to restore the second time');
+select lives_ok($$ update public.profiles set sharing_enabled = false where id = tests.uid('bob') $$,
+  'Bob pauses sharing');
+select lives_ok($$ select public.delete_my_account() $$, 'Bob deletes his account while paused');
+select is(public.restore_my_account(), true, 'Bob signs in again');
+select is((select sharing_enabled from public.profiles where id = tests.uid('bob')), false,
+  'Cancelling a deletion keeps sharing paused');
 select lives_ok($$ select public.delete_my_account() $$, 'You can schedule it again');
 reset role;
 
@@ -340,6 +346,30 @@ select is_empty($$ select 1 from public.group_members where group_id = tests.get
   'On day 8 its memberships are gone');
 select is_empty($$ select 1 from public.group_invites where group_id = tests.get('temp')::uuid $$,
   'On day 8 its invite code is gone');
+
+-- ---------------------------------------------------------------------------
+-- Admin never passes to an account being deleted
+-- ---------------------------------------------------------------------------
+
+select tests.login('dave');
+insert into tests.ctx (k, v) select 'handover', g.group_id::text from public.create_group('Handover') g;
+insert into tests.ctx (k, v)
+  select 'handover_code', i.code from public.group_invites i where i.group_id = tests.get('handover')::uuid;
+select tests.login('carol');
+select lives_ok($$ select public.join_group(tests.get('handover_code')) $$, 'Carol joins first');
+select tests.login('alice');
+select lives_ok($$ select public.join_group(tests.get('handover_code')) $$, 'Alice joins second');
+reset role;
+update public.profiles set deleted_at = now() where id = tests.uid('carol');
+
+select tests.login('dave');
+select throws_ok($$ select public.transfer_admin(tests.get('handover')::uuid, tests.uid('carol')) $$, 'member_leaving',
+  'An account being deleted cannot be made admin');
+select lives_ok($$ select public.leave_group(tests.get('handover')::uuid) $$, 'The admin leaves');
+reset role;
+select is((select admin_id from public.groups where id = tests.get('handover')::uuid), tests.uid('alice'),
+  'Admin skips the longer-standing member whose account is being deleted');
+update public.profiles set deleted_at = null where id = tests.uid('carol');
 
 -- ---------------------------------------------------------------------------
 -- Latest app version
