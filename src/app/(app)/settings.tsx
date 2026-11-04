@@ -7,9 +7,11 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Avatar } from '@/components/avatar';
 import { Button } from '@/components/button';
 import { Card, RowDivider, SectionLabel } from '@/components/card';
+import { TextField } from '@/components/text-field';
 import { useSharingStatus } from '@/features/location/sharing-status';
 import { useChosenMapStyle } from '@/features/map/styles';
-import { useMyProfile, useSetSharing } from '@/features/profile/api';
+import { useMyProfile, useSetDisplayName, useSetSharing } from '@/features/profile/api';
+import { APP_VERSION, useUpdateAvailable } from '@/lib/app-version';
 import { setTheme, THEMES, useTheme, type Theme } from '@/lib/appearance';
 import { deleteAccount, signOut, useAuth } from '@/lib/auth';
 import { friendlyError } from '@/lib/errors';
@@ -25,8 +27,10 @@ export default function Settings() {
   const profile = useMyProfile();
   const status = useSharingStatus();
   const theme = useTheme();
+  const update = useUpdateAvailable();
   const mapStyle = useChosenMapStyle();
   const setSharing = useSetSharing();
+  const setName = useSetDisplayName();
   const [deleting, setDeleting] = useState(false);
   const name = profile.data?.display_name ?? '';
   const sharing = profile.data?.sharing_enabled ?? true;
@@ -70,6 +74,20 @@ export default function Settings() {
         <Text style={[typeStyles.title, { color: colors.text }]}>{name}</Text>
         <Text style={[typeStyles.caption, { color: colors.muted, fontSize: 14 }]}>{session?.user.email}</Text>
       </View>
+
+      {profile.data && (
+        <View style={styles.section}>
+          {/* Keyed by the saved name so the field resets after saving. */}
+          <NameForm
+            key={name}
+            current={name}
+            saving={setName.isPending}
+            onSave={(next) =>
+              setName.mutate(next, { onError: (e) => Alert.alert("Couldn't change your name", friendlyError(e)) })
+            }
+          />
+        </View>
+      )}
 
       <View style={styles.section}>
         <SectionLabel>Location</SectionLabel>
@@ -175,11 +193,49 @@ export default function Settings() {
           )}
         </Pressable>
       </View>
+
+      <View style={styles.version}>
+        <Text style={[typeStyles.caption, { color: colors.muted }]}>G Track {APP_VERSION}</Text>
+        {update && (
+          <Text style={[typeStyles.caption, { color: colors.accentText, textAlign: 'center' }]}>
+            Version {update} is out. Ask the friend who shared G Track for the new file.
+          </Text>
+        )}
+      </View>
     </ScrollView>
   );
 }
 
+function NameForm({ current, saving, onSave }: { current: string; saving: boolean; onSave: (name: string) => void }) {
+  const [name, setName] = useState(current);
+  const trimmed = name.trim();
+  return (
+    <View style={styles.nameRow}>
+      <View style={styles.flex}>
+        <TextField
+          label="Your name"
+          hint="The name people in your groups see."
+          value={name}
+          onChangeText={setName}
+          maxLength={50}
+          autoCapitalize="words"
+        />
+      </View>
+      <Button
+        title="Save"
+        variant="secondary"
+        disabled={!trimmed || trimmed === current}
+        loading={saving}
+        onPress={() => onSave(trimmed)}
+        style={styles.saveButton}
+      />
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
+  nameRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
+  saveButton: { height: 54, borderRadius: 16, marginTop: 29 },
   container: { padding: 16, gap: 24, paddingBottom: 48 },
   profile: { alignItems: 'center', gap: 6, paddingVertical: 12 },
   section: { gap: 8 },
@@ -201,6 +257,7 @@ const styles = StyleSheet.create({
   flex: { flex: 1, gap: 2 },
   segments: { flexDirection: 'row', marginHorizontal: 14, marginBottom: 14, padding: 3, borderRadius: radius.pill },
   account: { gap: 8 },
+  version: { alignItems: 'center', gap: 4 },
   delete: { height: 48, alignItems: 'center', justifyContent: 'center' },
   segment: { flex: 1, height: 36, alignItems: 'center', justifyContent: 'center', borderRadius: radius.pill },
 });

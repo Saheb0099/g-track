@@ -64,3 +64,21 @@ export function useRestoreAccount() {
     });
   }, [scheduled, client]);
 }
+
+/** The name people in your groups see. Starts as your Google name. */
+export function useSetDisplayName() {
+  const { session } = useAuth();
+  const userId = session?.user.id;
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: async (name: string) => {
+      const { error } = await supabase.from('profiles').update({ display_name: name }).eq('id', userId!);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      void client.invalidateQueries({ queryKey: ['profile', userId] });
+      // Member lists show the name too.
+      void client.invalidateQueries({ queryKey: ['group'] });
+    },
+  });
+}

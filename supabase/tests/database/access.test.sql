@@ -342,6 +342,17 @@ select is_empty($$ select 1 from public.group_invites where group_id = tests.get
   'On day 8 its invite code is gone');
 
 -- ---------------------------------------------------------------------------
+-- Latest app version
+-- ---------------------------------------------------------------------------
+
+select tests.login('carol');
+select isnt_empty($$ select 1 from public.app_config where latest_version_code >= 1 $$,
+  'Signed-in users can read the latest version');
+select throws_ok($$ update public.app_config set latest_version_code = 99 $$, '42501', null,
+  'Nobody can change the latest version from the app');
+reset role;
+
+-- ---------------------------------------------------------------------------
 -- Retention job and anonymous access
 -- ---------------------------------------------------------------------------
 
@@ -366,6 +377,7 @@ select is_empty($$ select 1 from public.latest_locations where recorded_at < now
 set local role anon;
 select throws_ok($$ select public.create_group('Anon') $$, '42501', null, 'Signed-out users cannot call functions');
 select throws_ok($$ select 1 from public.locations $$, '42501', null, 'Signed-out users cannot read locations');
+select throws_ok($$ select 1 from public.app_config $$, '42501', null, 'Signed-out users cannot read the app version');
 reset role;
 
 select * from finish();

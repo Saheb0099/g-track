@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import * as Battery from 'expo-battery';
 import { PermissionsAndroid, Platform } from 'react-native';
 
+import { pendingSummary } from '@/features/location/queue';
 import { syncTracking } from '@/features/location/tracking';
 import { useMyProfile } from '@/features/profile/api';
 
@@ -33,6 +34,22 @@ export function useSetupChecks() {
           : await PermissionsAndroid.check('android.permission.POST_NOTIFICATIONS');
       const batteryOptimized = await Battery.isBatteryOptimizationEnabledAsync().catch(() => false);
       return { notifications, batteryOptimized };
+    },
+  });
+}
+
+/** Points normally upload within seconds; waiting longer than this means there's no internet. */
+const OFFLINE_AFTER_MS = 2 * 60_000;
+
+/** Points still on this phone, and whether they've waited long enough to call it offline. */
+export function usePendingUploads() {
+  return useQuery({
+    queryKey: ['tracking', 'pending'],
+    refetchInterval: 30_000,
+    queryFn: async () => {
+      const { count, oldest } = await pendingSummary();
+      const offline = count > 0 && !!oldest && Date.now() - Date.parse(oldest) > OFFLINE_AFTER_MS;
+      return { count, offline };
     },
   });
 }

@@ -56,6 +56,15 @@ export async function pendingCount(): Promise<number> {
   return row?.n ?? 0;
 }
 
+/** How many points are waiting to upload, and since when (the oldest one's time). */
+export async function pendingSummary(): Promise<{ count: number; oldest: string | null }> {
+  const database = await db();
+  const row = await database.getFirstAsync<{ n: number; oldest: string | null }>(
+    'SELECT COUNT(*) AS n, MIN(recorded_at) AS oldest FROM pending_points',
+  );
+  return { count: row?.n ?? 0, oldest: row?.oldest ?? null };
+}
+
 export async function getState<T>(key: string): Promise<T | null> {
   const database = await db();
   const row = await database.getFirstAsync<{ value: string }>('SELECT value FROM state WHERE key = ?', key);

@@ -10,6 +10,7 @@ import { MemberRow } from '@/features/groups/member-row';
 import { useSharingStatus } from '@/features/location/sharing-status';
 import type { LivePosition } from '@/features/map/api';
 import { staleAfterMs } from '@/features/map/group-map';
+import { useUpdateAvailable } from '@/lib/app-version';
 import { type as typeStyles, useColors } from '@/lib/theme';
 
 type Props = {
@@ -25,6 +26,7 @@ type Props = {
 export function PeoplePanel({ group, members, positions, now, meId, onSelect }: Props) {
   const colors = useColors();
   const status = useSharingStatus();
+  const update = useUpdateAvailable();
   const isAdmin = group.adminId === meId;
   const byUser = new globalThis.Map(positions.map((p) => [p.userId, p]));
   const openSettings = () => router.push({ pathname: '/group/[id]/settings', params: { id: group.id } });
@@ -48,11 +50,6 @@ export function PeoplePanel({ group, members, positions, now, meId, onSelect }: 
               {status.tone !== 'ok' && <Ionicons name="chevron-forward" size={14} color={colors.muted} />}
             </Pressable>
           )}
-          {group.deletedAt && (
-            <Text style={[typeStyles.caption, { color: colors.danger }]}>
-              Group will be deleted on {formatDeletionDate(group.deletedAt)}
-            </Text>
-          )}
         </View>
         {/* Invites, members, location timing and leaving all live in the group's settings. */}
         <Button
@@ -62,6 +59,18 @@ export function PeoplePanel({ group, members, positions, now, meId, onSelect }: 
           icon={<Ionicons name="settings-outline" size={17} color={colors.onAccent} />}
         />
       </View>
+
+      {/* Full width: these can run to two lines. */}
+      {update && (
+        <Text style={[typeStyles.caption, { color: colors.accentText }]}>
+          G Track {update} is out. Ask your friend for the new file.
+        </Text>
+      )}
+      {group.deletedAt && (
+        <Text style={[typeStyles.caption, { color: colors.danger }]}>
+          Group will be deleted on {formatDeletionDate(group.deletedAt)}
+        </Text>
+      )}
 
       <Card>
         {members.map((m, i) => (

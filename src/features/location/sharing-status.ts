@@ -1,4 +1,4 @@
-import { useSetupChecks, useTracking } from '@/features/location/use-tracking';
+import { usePendingUploads, useSetupChecks, useTracking } from '@/features/location/use-tracking';
 import { useMyProfile } from '@/features/profile/api';
 
 export type SharingStatus = { label: string; tone: 'ok' | 'attention' | 'off' };
@@ -8,12 +8,17 @@ export function useSharingStatus(): SharingStatus | null {
   const profile = useMyProfile();
   const tracking = useTracking();
   const checks = useSetupChecks();
+  const pending = usePendingUploads();
 
   if (!profile.data || !tracking.data) return null;
   const r = tracking.data;
   if (!profile.data.sharing_enabled) return { label: 'Sharing paused', tone: 'off' };
   if (!r.foreground || !r.background) return { label: 'Set up location sharing', tone: 'attention' };
   if (!r.servicesOn) return { label: 'Location is off on this phone', tone: 'attention' };
+  if (pending.data?.offline) {
+    const n = pending.data.count;
+    return { label: `Offline · ${n} point${n === 1 ? '' : 's'} will upload later`, tone: 'attention' };
+  }
   if (checks.data?.batteryOptimized) return { label: "You're sharing · finish battery setup", tone: 'attention' };
   return { label: "You're sharing", tone: 'ok' };
 }

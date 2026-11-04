@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useMemo } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Linking, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { Avatar } from '@/components/avatar';
 import { Button } from '@/components/button';
@@ -10,6 +10,7 @@ import type { Member } from '@/features/groups/api';
 import { statusLine } from '@/features/groups/member-row';
 import { useDayHistory, useRecentDays } from '@/features/history/api';
 import { buildTimeline } from '@/features/history/timeline';
+import { distanceMeters } from '@/features/location/rules';
 import type { LivePosition } from '@/features/map/api';
 import { type as typeStyles, useColors } from '@/lib/theme';
 import { timeAgoShort } from '@/lib/time';
@@ -20,6 +21,8 @@ type Props = {
   groupId: string;
   member: Member;
   position?: LivePosition;
+  /** Your own position, for "2.3 km away". */
+  myPosition?: LivePosition;
   now: number;
   staleMs: number;
   isYou: boolean;
@@ -33,6 +36,7 @@ export function PersonPanel({
   groupId,
   member,
   position,
+  myPosition,
   now,
   staleMs,
   isYou,
@@ -52,11 +56,17 @@ export function PersonPanel({
       : null;
   }, [history.data, position]);
 
-  const subtitle = position
+  const status = position
     ? hereSince
       ? `Here since ${clock(hereSince)}`
       : statusLine(member, position, now, staleMs)
     : statusLine(member, position, now, staleMs);
+  const away = !isYou && position && myPosition ? distanceMeters(asFix(myPosition), asFix(position)) : null;
+  const subtitle = away != null ? `${status} · ${awayText(away)}` : status;
+
+  // Google Maps (or whatever handles map links) with directions to where they are now.
+  const openDirections = () =>
+    position && Linking.openURL(`https://www.google.com/maps/dir/?api=1&destination=${position.lat},${position.lng}`);
   const battery = position?.batteryPct;
 
   return (
@@ -96,14 +106,23 @@ export function PersonPanel({
         </View>
       )}
 
+      {!isYou && position && (
+        <Button
+          title="Directions"
+          onPress={openDirections}
+          icon={<Ionicons name="navigate-circle-outline" size={20} color={colors.onAccent} />}
+        />
+      )}
+
       <View style={styles.actions}>
         <Button
           title="Today's path"
+          variant={!isYou && position ? 'secondary' : 'primary'}
           style={styles.flex}
           onPress={() =>
             router.push({ pathname: '/group/[id]/history/[userId]', params: { id: groupId, userId: member.userId } })
           }
-          icon={<Ionicons name="time-outline" size={18} color={colors.onAccent} />}
+          icon={<Ionicons name="time-outline" size={18} color={!isYou && position ? colors.text : colors.onAccent} />}
         />
         {position && (
           <Button
@@ -123,6 +142,15 @@ export function PersonPanel({
       </View>
     </View>
   );
+}
+
+const asFix = (p: LivePosition) => ({ lat: p.lat, lng: p.lng, time: 0 });
+
+/** "350 m away", "2.3 km away", "48 km away". */
+function awayText(meters: number) {
+  if (meters < 1000) return `${Math.max(10, Math.round(meters / 10) * 10)} m away`;
+  const km = meters / 1000;
+  return `${km < 10 ? km.toFixed(1) : Math.round(km)} km away`;
 }
 
 const styles = StyleSheet.create({

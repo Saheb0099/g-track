@@ -14,6 +14,27 @@ export type Database = {
   }
   public: {
     Tables: {
+      app_config: {
+        Row: {
+          id: number
+          latest_version_code: number
+          latest_version_name: string
+          updated_at: string
+        }
+        Insert: {
+          id?: number
+          latest_version_code: number
+          latest_version_name: string
+          updated_at?: string
+        }
+        Update: {
+          id?: number
+          latest_version_code?: number
+          latest_version_name?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       group_invites: {
         Row: {
           code: string

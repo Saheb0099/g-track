@@ -225,6 +225,7 @@ export default function Home() {
                   groupId={group.id}
                   member={selected}
                   position={positions.find((p) => p.userId === selected.userId)}
+                  myPosition={positions.find((p) => p.userId === meId)}
                   now={now}
                   staleMs={staleMs}
                   isYou={selected.userId === meId}
