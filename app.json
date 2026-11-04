@@ -45,7 +45,8 @@
           "isAndroidBackgroundLocationEnabled": true,
           "isAndroidForegroundServiceEnabled": true,
           "locationAlwaysAndWhenInUsePermission": "G Track shares your location with the friends in your groups, including while the app is closed.",
-          "locationWhenInUsePermission": "G Track shows your location to the friends in your groups."
+          "locationWhenInUsePermission": "G Track shows your location to the friends in your groups.",
+          "androidForegroundServiceIcon": "./assets/images/notification-icon.png"
         }
       ],
       "expo-background-task",

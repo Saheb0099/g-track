@@ -41,10 +41,12 @@ const UPDATE_OPTIONS: Location.LocationTaskOptions = {
   distanceInterval: 0,
   // Never wait on a "turn on location" dialog: there may be no screen to show it on.
   mayShowUserSettingsDialog: false,
+  // Android requires this notification while sharing in the background. It stays plain, like
+  // other apps' notifications (a colour would paint the whole card), with the white pin icon
+  // from app.json (androidForegroundServiceIcon).
   foregroundService: {
-    notificationTitle: 'G Track is sharing your location',
-    notificationBody: 'Friends in your groups can see where you are. You can pause in Settings.',
-    notificationColor: '#1F6FEB',
+    notificationTitle: 'Sharing your location',
+    notificationBody: 'Your groups can see where you are',
     // Keep tracking when the app's screen is closed; only the system or a pause stops it.
     killServiceOnDestroy: false,
   },
