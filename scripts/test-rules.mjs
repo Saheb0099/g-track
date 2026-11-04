@@ -4,7 +4,7 @@
 //
 //   npm run test:rules
 
-import { distanceMeters, judgeFix } from '../src/features/location/rules.ts';
+import { distanceMeters, judgeFix, shouldSave } from '../src/features/location/rules.ts';
 
 const HOME = { lat: 22.5726, lng: 88.3639 };
 const MIN = 60_000;
@@ -93,6 +93,25 @@ for (const [name, kmh, acc] of [
   const far = kept.filter((f) => distanceMeters(HOME, f) > 1000).length;
   check('Glitch hopping between two wrong places', far === 0, `${far} far fixes kept`);
 }
+// The phone's clock set back an hour: readings after that must still be believed and saved.
+{
+  const lastGood = { ...HOME, time: 60 * MIN, accuracy: 15 };
+  const next = { ...east(HOME, 0.3), time: 2 * MIN, accuracy: 15 };
+  const { verdict } = judgeFix(lastGood, null, next);
+  const saves = shouldSave(lastGood, next, { checkEveryMs: MIN, saveEveryMs: 5 * MIN });
+  check('Clock set back an hour: the next reading is kept', verdict === 'accept' && saves, `${verdict}, save=${saves}`);
+}
+{
+  // Readings a few seconds out of order are not a clock change.
+  const last = { ...HOME, time: 10 * MIN, accuracy: 15 };
+  const saves = shouldSave(
+    last,
+    { ...HOME, time: 10 * MIN - 5000, accuracy: 15 },
+    { checkEveryMs: MIN, saveEveryMs: 5 * MIN },
+  );
+  check('A reading 5 s older than the last is still skipped', !saves);
+}
+
 // Known limit, reported rather than checked: a glitch that drifts steadily away looks like a trip.
 {
   const fixes = [];

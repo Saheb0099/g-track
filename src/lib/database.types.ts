@@ -283,6 +283,7 @@ export type Database = {
         Args: { p_code: string }
         Returns: {
           group_id: string
+          is_closing: boolean
           is_member: boolean
           member_count: number
           name: string

@@ -75,6 +75,18 @@ const TRIP_TRUST_MS = 10 * 60_000;
 
 export type Verdict = 'accept' | 'reject' | 'hold';
 
+/** Readings can arrive a little out of order; further back than this, the clock was set back. */
+const CLOCK_BACK_MS = 2 * 60_000;
+
+/**
+ * True when `next` is well before `earlier`: the phone's clock was set back. Times stored since
+ * then are "in the future", and comparing against them would hold up saving until the clock
+ * caught up again, so they no longer count.
+ */
+export function clockMovedBack(earlier: { time: number } | null, next: { time: number }): boolean {
+  return !!earlier && next.time < earlier.time - CLOCK_BACK_MS;
+}
+
 export type Judgement = {
   verdict: Verdict;
   reason: string;
@@ -101,7 +113,9 @@ function movesOn(lastGood: Fix | null, held: Fix | null, next: Fix, acc: number)
  * - hold: a big jump from a shaky fix; remember it, and accept only if a later fix agrees.
  * - reject: rough, or physically impossible.
  */
-export function judgeFix(lastGood: Fix | null, held: Fix | null, next: Fix): Judgement {
+export function judgeFix(lastGoodFix: Fix | null, heldFix: Fix | null, next: Fix): Judgement {
+  const lastGood = clockMovedBack(lastGoodFix, next) ? null : lastGoodFix;
+  const held = clockMovedBack(heldFix, next) ? null : heldFix;
   const acc = next.accuracy ?? MAX_ACCURACY_M;
   if (acc > MAX_ACCURACY_M) return { verdict: 'reject', reason: `rough fix ±${Math.round(acc)} m` };
 
@@ -145,7 +159,7 @@ export function judgeFix(lastGood: Fix | null, held: Fix | null, next: Fix): Jud
 }
 
 export function shouldSave(last: Fix | null, next: Fix, schedule: Schedule): boolean {
-  if (!last) return true;
+  if (!last || clockMovedBack(last, next)) return true;
   if (next.time <= last.time) return false;
   if (next.time - last.time >= saveDueMs(schedule)) return true;
   // A fuzzy fix can look like movement; only count distance beyond the reading's own error.

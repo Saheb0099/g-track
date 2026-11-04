@@ -36,16 +36,18 @@ type Props = {
   /** Space covered by floating UI, kept clear when framing everyone. */
   insets: { top: number; bottom: number };
   staleMs: number;
+  /** The group shown: switching to another frames its people. */
+  frameKey: string;
 };
 
 export const GroupMap = forwardRef<GroupMapHandle, Props>(function GroupMap(
-  { positions, members, now, meId, selectedId, onSelect, insets, staleMs },
+  { positions, members, now, meId, selectedId, onSelect, insets, staleMs, frameKey },
   ref,
 ) {
   const colors = useColors();
   const mapStyle = useMapStyle();
   const camera = useRef<CameraRef>(null);
-  const fittedOnce = useRef(false);
+  const framedFor = useRef<string | null>(null);
   // The camera ignores moves made before the map has loaded its style.
   const [loaded, setLoaded] = useState(false);
 
@@ -89,13 +91,15 @@ export const GroupMap = forwardRef<GroupMapHandle, Props>(function GroupMap(
     showEveryone: () => showEveryone(),
   }));
 
-  // Frame everyone once the map is ready and the first positions are in.
+  // Frame everyone once the map is ready and the first positions are in, and again (animated)
+  // after switching groups, whose people may be somewhere else entirely.
   useEffect(() => {
-    if (!loaded || fittedOnce.current || points.length === 0) return;
-    fittedOnce.current = true;
-    showEveryone(0);
+    if (!loaded || points.length === 0 || framedFor.current === frameKey) return;
+    const first = framedFor.current === null;
+    framedFor.current = frameKey;
+    showEveryone(first ? 0 : 800);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loaded, points.length]);
+  }, [loaded, points.length, frameKey]);
 
   return (
     <Map

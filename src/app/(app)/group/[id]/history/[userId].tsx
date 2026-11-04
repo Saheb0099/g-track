@@ -102,6 +102,7 @@ export default function MemberHistory() {
           stays={stays}
           selected={selected}
           insets={{ top: top + 110, bottom: height * 0.42 }}
+          frameKey={days[dayIndex].start.toISOString()}
         />
       </BlurTargetView>
 

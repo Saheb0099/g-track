@@ -317,6 +317,8 @@ select lives_ok($$ select public.delete_group(tests.get('temp')::uuid) $$, 'The 
 select tests.login('carol');
 select isnt_empty($$ select 1 from public.groups where id = tests.get('temp')::uuid and deleted_at is not null $$,
   'The group stays, marked for deletion');
+select is((select is_closing from public.preview_group(tests.get('temp_code'))), true,
+  'The invite preview says the group is being deleted');
 select isnt_empty($$ select 1 from public.group_members where group_id = tests.get('temp')::uuid and user_id = tests.uid('carol') $$,
   'Members stay during the 7 days');
 select throws_ok($$ select public.restore_group(tests.get('temp')::uuid) $$, 'not_admin',

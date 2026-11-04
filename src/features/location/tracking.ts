@@ -8,6 +8,7 @@ import GtrackAlarm from '../../../modules/gtrack-alarm';
 
 import { clearAll, enqueue, getState, logEvent, setState, type PendingPoint } from '@/features/location/queue';
 import {
+  clockMovedBack,
   DEFAULT_SCHEDULE,
   judgeFix,
   saveDueMs,
@@ -162,13 +163,27 @@ function toPoint(
   };
 }
 
+// Readings come from the location task, the alarm and the app at once, and each reads and
+// writes the tracker state (last good fix, last saved point). One at a time, so two can't both
+// decide a point is due and save twice.
+let recording: Promise<unknown> = Promise.resolve();
+
 /**
  * Checks a reading is believable, applies the save rule, and queues it if it should be kept.
  * `verdict` says whether the reading was believed at all (see judgeFix).
  */
-export async function recordReading(
+export function recordReading(
   location: Location.LocationObject,
   options: { source?: PendingPoint['source']; force?: boolean; battery?: number | null } = {},
+): Promise<{ saved: boolean; verdict: Verdict }> {
+  const next = recording.then(() => recordReadingNow(location, options));
+  recording = next.catch(() => {});
+  return next;
+}
+
+async function recordReadingNow(
+  location: Location.LocationObject,
+  options: { source?: PendingPoint['source']; force?: boolean; battery?: number | null },
 ): Promise<{ saved: boolean; verdict: Verdict }> {
   const fix: Fix = {
     lat: location.coords.latitude,
@@ -199,7 +214,9 @@ export async function recordReading(
 
   const last = await getState<Fix>('last_saved');
   // A forced save (the app was just opened) still skips a reading within a minute of the last one.
-  const keep = options.force ? !last || fix.time - last.time >= 60_000 : shouldSave(last, fix, await getSchedule());
+  const keep = options.force
+    ? !last || fix.time - last.time >= 60_000 || clockMovedBack(last, fix)
+    : shouldSave(last, fix, await getSchedule());
   if (!keep) return { saved: false, verdict };
 
   const battery = options.battery !== undefined ? options.battery : await batteryPercent();
@@ -348,7 +365,8 @@ export async function checkIn(reason: 'alarm' | 'heartbeat') {
 
   const schedule = await getSchedule();
   const last = await getState<Fix>('last_saved');
-  const due = !last || Date.now() - last.time >= saveDueMs(schedule);
+  const now = { time: Date.now() };
+  const due = !last || now.time - last.time >= saveDueMs(schedule) || clockMovedBack(last, now);
   // "Registered" survives the service being stopped by the system, so also judge by whether
   // readings are actually arriving.
   const registered = await Location.hasStartedLocationUpdatesAsync(LOCATION_TASK);
@@ -379,8 +397,13 @@ export async function checkIn(reason: 'alarm' | 'heartbeat') {
     );
   }
 
-  // An admin's new timing reaches every phone here, within 5 minutes.
-  await withTimeout(Promise.all([flushQueue(), applyNewSchedule()]), UPLOAD_STEP_MS, `${reason}: upload`);
+  // An admin's new timing reaches every phone here, within 5 minutes. Friends also learn here,
+  // not only when the app is opened, if location was turned off or permission taken away.
+  await withTimeout(
+    Promise.all([flushQueue(), applyNewSchedule(), getReadiness().then((r) => reportStatus(statusFor(r)))]),
+    UPLOAD_STEP_MS,
+    `${reason}: upload`,
+  );
 }
 
 type Allowed = 'yes' | 'signed_out' | 'paused' | 'unknown';

@@ -15,10 +15,12 @@ type Props = {
   selected: Stay | null;
   /** Space covered by floating UI, kept clear when framing the day. */
   insets: { top: number; bottom: number };
+  /** Which day is shown: the map frames it once, not again each time a new point arrives. */
+  frameKey: string;
 };
 
 export const HistoryMap = forwardRef<HistoryMapHandle, Props>(function HistoryMap(
-  { points, stays, selected, insets },
+  { points, stays, selected, insets, frameKey },
   ref,
 ) {
   const colors = useColors();
@@ -51,12 +53,16 @@ export const HistoryMap = forwardRef<HistoryMapHandle, Props>(function HistoryMa
     focus: (lat, lng) => camera.current?.flyTo({ center: [lng, lat], zoom: 16, duration: 700, padding }),
   }));
 
-  // Frame the whole day once the map is ready, and again whenever a different day is shown.
+  // Frame the whole day once the map is ready, and again whenever a different day is shown, but
+  // not when today's path grows, which would undo zooming in on a place.
+  const framed = useRef<string | null>(null);
   useEffect(() => {
     const bounds = boundsAround(coords);
-    if (loaded && bounds) camera.current?.fitBounds(bounds, { padding, duration: 400 });
+    if (!loaded || !bounds || framed.current === frameKey) return;
+    framed.current = frameKey;
+    camera.current?.fitBounds(bounds, { padding, duration: 400 });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [coords, loaded]);
+  }, [coords, loaded, frameKey]);
 
   const start = path[0];
   const end = path.at(-1);

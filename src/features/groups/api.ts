@@ -29,7 +29,14 @@ export type Member = {
   deletedAt: string | null;
 };
 
-export type GroupPreview = { groupId: string; name: string; memberCount: number; isMember: boolean };
+export type GroupPreview = {
+  groupId: string;
+  name: string;
+  memberCount: number;
+  isMember: boolean;
+  /** Being deleted: it takes no new members. */
+  isClosing: boolean;
+};
 
 export const MAX_MEMBERS = 10;
 
@@ -173,7 +180,13 @@ export function usePreviewGroup(code: string) {
       if (error) throw error;
       const row = data[0];
       return row
-        ? { groupId: row.group_id, name: row.name, memberCount: row.member_count, isMember: row.is_member }
+        ? {
+            groupId: row.group_id,
+            name: row.name,
+            memberCount: row.member_count,
+            isMember: row.is_member,
+            isClosing: row.is_closing,
+          }
         : null;
     },
   });

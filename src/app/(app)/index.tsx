@@ -93,6 +93,11 @@ export default function Home() {
 
   const selected = members.data?.find((m) => m.userId === selectedId);
   const staleMs = staleAfterMs(group?.saveEveryMin ?? 5);
+  // "2.3 km away" needs to know where you are now: not while you're paused, or if your own
+  // position is old (it would measure from where you were).
+  const mine = positions.find((p) => p.userId === meId);
+  const myPosition =
+    profile.data?.sharing_enabled && mine && now - Date.parse(mine.recordedAt) <= staleMs ? mine : undefined;
   const topBar = safe.top + 12;
   // Sheet heights, measured in the area above the navigation bar. The person view needs more
   // room than the people list; fully open stops just under the top bar.
@@ -136,6 +141,7 @@ export default function Home() {
           onSelect={select}
           insets={mapInsets}
           staleMs={staleMs}
+          frameKey={groupId ?? 'solo'}
         />
       </BlurTargetView>
 
@@ -225,7 +231,7 @@ export default function Home() {
                   groupId={group.id}
                   member={selected}
                   position={positions.find((p) => p.userId === selected.userId)}
-                  myPosition={positions.find((p) => p.userId === meId)}
+                  myPosition={myPosition}
                   now={now}
                   staleMs={staleMs}
                   isYou={selected.userId === meId}

@@ -1,5 +1,5 @@
 import { router } from 'expo-router';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { Button } from '@/components/button';
@@ -13,11 +13,17 @@ export default function CreateGroup() {
   const [name, setName] = useState('');
   const create = useCreateGroup();
   const trimmed = name.trim();
+  // Set at once (state updates later), so the keyboard's Done and the button can't both create.
+  const submitting = useRef(false);
 
   function submit() {
-    if (!trimmed) return;
+    if (!trimmed || submitting.current) return;
+    submitting.current = true;
     create.mutate(trimmed, {
       onSuccess: ({ groupId }) => router.replace({ pathname: '/group/[id]', params: { id: groupId } }),
+      onError: () => {
+        submitting.current = false;
+      },
     });
   }
 

@@ -38,9 +38,11 @@ export default function JoinGroup() {
     );
   }
   if (preview.isError) {
-    return message("Couldn't check this code", friendlyError(preview.error), (
-      <Button title="Try again" onPress={() => preview.refetch()} />
-    ));
+    return message(
+      "Couldn't check this code",
+      friendlyError(preview.error),
+      <Button title="Try again" onPress={() => preview.refetch()} />,
+    );
   }
 
   const group = preview.data;
@@ -51,9 +53,14 @@ export default function JoinGroup() {
     );
   }
   if (group.isMember) {
-    return message(`You're already in ${group.name}`, '', (
-      <Button title="Open group" onPress={() => openGroup(group.groupId)} />
-    ));
+    return message(
+      `You're already in ${group.name}`,
+      '',
+      <Button title="Open group" onPress={() => openGroup(group.groupId)} />,
+    );
+  }
+  if (group.isClosing) {
+    return message(`${group.name} is being deleted`, "Its admin is deleting it, so it isn't taking new members.");
   }
   if (group.memberCount >= MAX_MEMBERS) {
     return message(`${group.name} is full`, `A group can have at most ${MAX_MEMBERS} people.`);
@@ -64,11 +71,7 @@ export default function JoinGroup() {
     `${group.memberCount} of ${MAX_MEMBERS} members. Once you join, people in this group can see your location and where you've been this week.`,
     <>
       {join.isError && <Text style={[styles.body, { color: colors.danger }]}>{friendlyError(join.error)}</Text>}
-      <Button
-        title="Join group"
-        loading={join.isPending}
-        onPress={() => join.mutate(code, { onSuccess: openGroup })}
-      />
+      <Button title="Join group" loading={join.isPending} onPress={() => join.mutate(code, { onSuccess: openGroup })} />
     </>,
   );
 }
