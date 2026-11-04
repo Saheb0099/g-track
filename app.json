@@ -22,7 +22,8 @@
       "permissions": [
         "android.permission.POST_NOTIFICATIONS",
         "android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS"
-      ]
+      ],
+      "versionCode": 1
     },
     "web": {
       "output": "single",
