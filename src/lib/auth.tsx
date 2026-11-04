@@ -98,3 +98,13 @@ export async function signOut() {
   // Clears the stored session even when offline; the SIGNED_OUT event then clears cached data.
   await supabase.auth.signOut();
 }
+
+/**
+ * Schedules the account for deletion in 7 days, then signs out. Signing in again before then
+ * cancels it (see useRestoreAccount).
+ */
+export async function deleteAccount() {
+  const { error } = await supabase.rpc('delete_my_account');
+  if (error) throw error;
+  await signOut();
+}

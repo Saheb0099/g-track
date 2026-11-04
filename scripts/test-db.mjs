@@ -10,6 +10,9 @@
 //
 //   npm run test:db              all test files
 //   npm run test:db -- access    only files whose name contains "access"
+//   npm run test:db -- --with supabase/migrations/<new>.sql
+//                                apply a migration first (inside the same rolled-back run),
+//                                to test it before `supabase db push`
 
 import { execFileSync } from 'node:child_process';
 import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -20,8 +23,13 @@ const TEST_DIR = 'supabase/tests/database';
 const ASSERTION = /^select (ok|is|isnt|matches|is_empty|isnt_empty|lives_ok|throws_ok)\(/gm;
 const MARKER = 'TAP_REPORT';
 
-const filter = process.argv[2] ?? '';
-const files = readdirSync(TEST_DIR).filter((f) => f.endsWith('.test.sql') && f.includes(filter)).sort();
+const args = process.argv.slice(2);
+const withAt = args.indexOf('--with');
+const pending = withAt >= 0 ? readFileSync(args.splice(withAt, 2)[1], 'utf8') : '';
+const filter = args[0] ?? '';
+const files = readdirSync(TEST_DIR)
+  .filter((f) => f.endsWith('.test.sql') && f.includes(filter))
+  .sort();
 if (files.length === 0) {
   console.error(`No test files in ${TEST_DIR} match "${filter}".`);
   process.exit(1);
@@ -54,7 +62,7 @@ function wrap(sql) {
   const ending = /select \* from finish\(\);\s*rollback;\s*$/;
   if (!ending.test(sql)) throw new Error('Test file must end with "select * from finish();" and "rollback;"');
   const body = sql.replace(ending, '').replace(ASSERTION, 'insert into tap_out.lines (line) select $1(');
-  return body.replace(/^begin;\s*$/m, `begin;\n${prelude}`) + report;
+  return body.replace(/^begin;\s*$/m, () => `begin;\n${prelude}\n${pending}`) + report;
 }
 
 let failed = 0;

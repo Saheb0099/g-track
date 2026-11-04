@@ -2,6 +2,7 @@ import { Stack } from 'expo-router';
 
 import { useMarkLinkHandled } from '@/features/groups/pending-invite';
 import { useTracking } from '@/features/location/use-tracking';
+import { useRestoreAccount } from '@/features/profile/api';
 import { fonts, useColors } from '@/lib/theme';
 
 // Opening an invite link from outside the app still puts the map underneath, so Back works.
@@ -10,6 +11,7 @@ export const unstable_settings = { anchor: 'index' };
 export default function AppLayout() {
   const colors = useColors();
   useMarkLinkHandled();
+  useRestoreAccount();
   // While signed in, keep location sharing in step with permissions and the sharing switch.
   useTracking();
 

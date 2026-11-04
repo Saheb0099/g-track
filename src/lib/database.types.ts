@@ -200,6 +200,7 @@ export type Database = {
         Row: {
           avatar_url: string | null
           created_at: string
+          deleted_at: string | null
           display_name: string
           id: string
           last_seen_at: string | null
@@ -209,6 +210,7 @@ export type Database = {
         Insert: {
           avatar_url?: string | null
           created_at?: string
+          deleted_at?: string | null
           display_name: string
           id: string
           last_seen_at?: string | null
@@ -218,6 +220,7 @@ export type Database = {
         Update: {
           avatar_url?: string | null
           created_at?: string
+          deleted_at?: string | null
           display_name?: string
           id?: string
           last_seen_at?: string | null
@@ -259,6 +262,7 @@ export type Database = {
         Args: { p_group_id: string; p_name: string }
         Returns: undefined
       }
+      restore_my_account: { Args: never; Returns: boolean }
       transfer_admin: {
         Args: { p_group_id: string; p_user_id: string }
         Returns: undefined

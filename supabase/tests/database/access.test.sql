@@ -236,13 +236,48 @@ select is_empty($$ select 1 from public.groups where id = tests.get('solo')::uui
 -- Deleting an account
 -- ---------------------------------------------------------------------------
 
+-- Carol is a friend in Bob's group, and Bob is sharing, so there's a live position to hide.
+reset role;
+insert into public.group_members (group_id, user_id) values (tests.gid(), tests.uid('carol'));
+update public.profiles set sharing_enabled = true where id = tests.uid('bob');
+
 select tests.login('bob');
 select lives_ok($$ select public.delete_my_account() $$, 'You can delete your account');
 reset role;
-select is_empty($$ select 1 from public.profiles where id = tests.uid('bob') $$, 'Profile is gone');
-select is_empty($$ select 1 from public.locations where user_id = tests.uid('bob') $$, 'All points are gone');
+select isnt((select deleted_at from public.profiles where id = tests.uid('bob')), null,
+  'Deletion is scheduled, not done at once');
+select isnt_empty($$ select 1 from public.locations where user_id = tests.uid('bob') $$,
+  'Points are kept for the 7 days');
 select isnt((select admin_id from public.groups where id = tests.gid()), tests.uid('bob'),
   'Admin passes on when the admin deletes their account');
+
+select tests.login('carol');
+select isnt_empty($$ select 1 from public.group_members where user_id = tests.uid('bob') $$,
+  'They stay in the group while waiting');
+select isnt_empty($$ select 1 from public.locations where user_id = tests.uid('bob') $$,
+  'Friends still see their past week');
+select is_empty($$ select 1 from public.latest_locations where user_id = tests.uid('bob') $$,
+  'Friends no longer see where they are now');
+
+select tests.login('bob');
+select is(public.restore_my_account(), true, 'Signing in again cancels the deletion');
+select is((select deleted_at from public.profiles where id = tests.uid('bob')), null,
+  'A restored account is no longer marked');
+select is(public.restore_my_account(), false, 'Nothing to restore the second time');
+select lives_ok($$ select public.delete_my_account() $$, 'You can schedule it again');
+reset role;
+
+-- Run the purge job's own command on day 6, then day 8.
+update public.profiles set deleted_at = now() - interval '6 days' where id = tests.uid('bob');
+do $$ begin execute (select command from cron.job where jobname = 'purge-deleted-accounts'); end $$;
+select isnt_empty($$ select 1 from public.profiles where id = tests.uid('bob') $$,
+  'An account is kept until the 7 days are up');
+update public.profiles set deleted_at = now() - interval '7 days 1 minute' where id = tests.uid('bob');
+do $$ begin execute (select command from cron.job where jobname = 'purge-deleted-accounts'); end $$;
+select is_empty($$ select 1 from public.profiles where id = tests.uid('bob') $$, 'On day 8 the profile is gone');
+select is_empty($$ select 1 from public.locations where user_id = tests.uid('bob') $$, 'On day 8 all points are gone');
+select is_empty($$ select 1 from public.group_members where user_id = tests.uid('bob') $$,
+  'On day 8 they leave every group');
 
 -- ---------------------------------------------------------------------------
 -- Retention job and anonymous access
@@ -250,6 +285,21 @@ select isnt((select admin_id from public.groups where id = tests.gid()), tests.u
 
 select is((select schedule from cron.job where jobname = 'delete-old-locations'), '0 * * * *',
   'Hourly cleanup job is scheduled');
+
+-- Run the job's own command. Old points can't be uploaded, so age fresh ones instead.
+insert into public.locations (user_id, lat, lng, recorded_at) values
+  (tests.uid('alice'), 1, 1, now() - interval '1 hour'),
+  (tests.uid('alice'), 1, 1, now() - interval '2 hours');
+update public.locations set recorded_at = now() - interval '8 days'
+  where user_id = tests.uid('alice') and recorded_at = now() - interval '2 hours';
+update public.latest_locations set recorded_at = now() - interval '8 days' where user_id = tests.uid('alice');
+do $$ begin execute (select command from cron.job where jobname = 'delete-old-locations'); end $$;
+select is((select count(*) from public.locations where recorded_at < now() - interval '7 days'), 0::bigint,
+  'Cleanup deletes points older than 7 days');
+select is((select count(*) from public.locations where user_id = tests.uid('alice')), 1::bigint,
+  'Cleanup keeps newer points');
+select is_empty($$ select 1 from public.latest_locations where recorded_at < now() - interval '7 days' $$,
+  'Cleanup deletes a live position older than 7 days');
 
 set local role anon;
 select throws_ok($$ select public.create_group('Anon') $$, '42501', null, 'Signed-out users cannot call functions');

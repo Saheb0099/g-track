@@ -15,6 +15,8 @@ export type Member = {
   status: DeviceStatus;
   sharingEnabled: boolean;
   lastSeenAt: string | null;
+  /** Set while their account waits out the 7 days before it's removed. */
+  deletedAt: string | null;
 };
 
 export type GroupPreview = { groupId: string; name: string; memberCount: number; isMember: boolean };
@@ -97,7 +99,9 @@ export function useMembers(groupId: string) {
     queryFn: async (): Promise<Member[]> => {
       const { data, error } = await supabase
         .from('group_members')
-        .select('user_id, joined_at, profiles(display_name, avatar_url, status, sharing_enabled, last_seen_at)')
+        .select(
+          'user_id, joined_at, profiles(display_name, avatar_url, status, sharing_enabled, last_seen_at, deleted_at)',
+        )
         .eq('group_id', groupId)
         .order('joined_at');
       if (error) throw error;
@@ -112,6 +116,7 @@ export function useMembers(groupId: string) {
                 status: m.profiles.status,
                 sharingEnabled: m.profiles.sharing_enabled,
                 lastSeenAt: m.profiles.last_seen_at,
+                deletedAt: m.profiles.deleted_at,
               },
             ]
           : [],
@@ -141,7 +146,9 @@ export function usePreviewGroup(code: string) {
       const { data, error } = await supabase.rpc('preview_group', { p_code: code });
       if (error) throw error;
       const row = data[0];
-      return row ? { groupId: row.group_id, name: row.name, memberCount: row.member_count, isMember: row.is_member } : null;
+      return row
+        ? { groupId: row.group_id, name: row.name, memberCount: row.member_count, isMember: row.is_member }
+        : null;
     },
   });
 }

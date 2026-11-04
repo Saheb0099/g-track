@@ -11,6 +11,7 @@ import { timeAgo } from '@/lib/time';
 
 /** "2 min ago · ±8 m", "Paused", "Location is off"… for a person's row. */
 export function statusLine(member: Member, position: LivePosition | undefined, now: number): string {
+  if (member.deletedAt) return 'Account deleted';
   if (!member.sharingEnabled) return 'Sharing paused';
   if (member.status === 'location_off') return 'Location is off';
   if (member.status === 'permission_missing') return 'Location permission missing';
@@ -69,7 +70,14 @@ export function MemberRow({ member, position, now, isYou, isAdmin, onPress, trai
 }
 
 const styles = StyleSheet.create({
-  row: { minHeight: 64, flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 14, paddingVertical: 10 },
+  row: {
+    minHeight: 64,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
   text: { flex: 1, gap: 2 },
   chip: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999 },
 });
