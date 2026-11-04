@@ -17,6 +17,9 @@ import android.os.SystemClock
 internal object AlarmScheduler {
   private const val PREFS = "gtrack_alarm"
   private const val KEY_INTERVAL = "interval_ms"
+  // Wall-clock time of the next tick, so a missed or wiped alarm can be noticed (survives reboot).
+  private const val KEY_NEXT_DUE = "next_due_ms"
+  private const val OVERDUE_GRACE_MS = 60_000L
   private const val REQUEST_CODE = 4102
 
   fun start(context: Context, intervalMs: Long) {
@@ -26,10 +29,35 @@ internal object AlarmScheduler {
 
   fun stop(context: Context) {
     prefs(context).edit().remove(KEY_INTERVAL).apply()
-    alarmManager(context).cancel(pendingIntent(context))
+    val pending = pendingIntent(context)
+    alarmManager(context).cancel(pending)
+    // Cancel the PendingIntent too, so hasPendingAlarm() reports no alarm afterwards.
+    pending.cancel()
   }
 
   fun isRunning(context: Context): Boolean = interval(context) > 0
+
+  /**
+   * Re-arms the chain if ticking is on but no alarm is waiting. Android clears an app's alarms
+   * on update and reboot, and some phone makers block the broadcasts that would re-arm them.
+   * Returns true if it had to schedule one.
+   */
+  fun ensure(context: Context): Boolean {
+    if (!isRunning(context)) return false
+    // A PendingIntent can outlive its alarm, so an overdue tick also counts as "none waiting".
+    val overdue = System.currentTimeMillis() > prefs(context).getLong(KEY_NEXT_DUE, 0L) + OVERDUE_GRACE_MS
+    if (hasPendingAlarm(context) && !overdue) return false
+    scheduleIn(context, interval(context))
+    return true
+  }
+
+  private fun hasPendingAlarm(context: Context): Boolean =
+    PendingIntent.getBroadcast(
+      context,
+      REQUEST_CODE,
+      Intent(context, TickReceiver::class.java),
+      PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE,
+    ) != null
 
   /** Schedules the next tick, if ticking is on. */
   fun scheduleNext(context: Context) {
@@ -42,6 +70,7 @@ internal object AlarmScheduler {
     if (!isRunning(context)) return
     val alarms = alarmManager(context)
     val at = SystemClock.elapsedRealtime() + delayMs
+    prefs(context).edit().putLong(KEY_NEXT_DUE, System.currentTimeMillis() + delayMs).apply()
     if (canScheduleExact(context)) {
       alarms.setExactAndAllowWhileIdle(AlarmManager.ELAPSED_REALTIME_WAKEUP, at, pendingIntent(context))
     } else {

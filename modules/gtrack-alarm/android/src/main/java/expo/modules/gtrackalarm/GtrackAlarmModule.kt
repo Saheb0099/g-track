@@ -17,6 +17,8 @@ class GtrackAlarmModule : Module() {
 
     Function("isRunning") { AlarmScheduler.isRunning(context) }
 
+    Function("ensure") { AlarmScheduler.ensure(context) }
+
     Function("canScheduleExact") { AlarmScheduler.canScheduleExact(context) }
   }
 }

@@ -15,3 +15,20 @@ index 8088ec6..1373d66 100644
  
        if (shouldUseForegroundService && !hasForegroundServicePermissions()) {
          throw ForegroundServicePermissionsException()
+diff --git a/node_modules/expo-location/android/src/main/java/expo/modules/location/taskConsumers/LocationTaskConsumer.kt b/node_modules/expo-location/android/src/main/java/expo/modules/location/taskConsumers/LocationTaskConsumer.kt
+index 1b6395f..c67955a 100644
+--- a/node_modules/expo-location/android/src/main/java/expo/modules/location/taskConsumers/LocationTaskConsumer.kt
++++ b/node_modules/expo-location/android/src/main/java/expo/modules/location/taskConsumers/LocationTaskConsumer.kt
+@@ -188,10 +188,8 @@ class LocationTaskConsumer(context: Context, taskManagerUtils: TaskManagerUtilsI
+     if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
+       return
+     }
+-    if (!AppForegroundedSingleton.isForegrounded) {
+-      Log.w(TAG, "Foreground location task cannot be started while the app is in the background!")
+-      return
+-    }
++    // G Track patch: no foreground check here; Android decides (see the start call below,
++    // which logs and returns if Android refuses).
+     val task = mTask ?: run {
+       Log.w(TAG, "Location task is null")
+       return

@@ -159,6 +159,7 @@ export async function startTracking() {
   // Wake-ups first: scheduling them always works, while starting the location service can be
   // refused (Android blocks starting it while the app isn't on screen).
   if (!GtrackAlarm.isRunning()) GtrackAlarm.start(SAVE_EVERY_MS);
+  else GtrackAlarm.ensure();
   if (!(await TaskManager.isTaskRegisteredAsync(HEARTBEAT_TASK))) {
     await BackgroundTask.registerTaskAsync(HEARTBEAT_TASK, { minimumInterval: HEARTBEAT_MINUTES });
   }
@@ -189,7 +190,11 @@ export async function checkIn(reason: 'alarm' | 'heartbeat') {
   const registered = await Location.hasStartedLocationUpdatesAsync(LOCATION_TASK);
   const lastReadingAt = (await getState<number>('last_reading_at')) ?? 0;
   const silent = Date.now() - lastReadingAt > SERVICE_SILENT_MS;
-  await logEvent(`${reason}: registered=${registered}, readings silent=${silent}, point due=${due}`);
+  // The heartbeat job may be the only thing still running if the alarm chain was wiped.
+  const rearmed = GtrackAlarm.ensure();
+  await logEvent(
+    `${reason}: registered=${registered}, readings silent=${silent}, point due=${due}, alarm re-armed=${rearmed}`,
+  );
 
   // The point comes first, so nothing below can stand in the way of the 5-minute record.
   if (due) {
