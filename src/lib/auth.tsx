@@ -7,6 +7,7 @@ import {
 import type { Session } from '@supabase/supabase-js';
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 
+import { queryClient } from '@/lib/query';
 import { supabase } from '@/lib/supabase';
 
 const webClientId = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID;
@@ -25,8 +26,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<AuthState>({ session: null, loading: true });
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => setState({ session: data.session, loading: false }));
-    const { data } = supabase.auth.onAuthStateChange((_event, session) => setState({ session, loading: false }));
+    supabase.auth
+      .getSession()
+      .then(({ data }) => setState({ session: data.session, loading: false }))
+      // A broken stored session shouldn't leave the splash screen up forever; show sign-in instead.
+      .catch(() => setState({ session: null, loading: false }));
+
+    const { data } = supabase.auth.onAuthStateChange((event, session) => {
+      // Covers every way a session ends (sign-out, expired refresh token), not just the button.
+      if (event === 'SIGNED_OUT') queryClient.clear();
+      setState({ session, loading: false });
+    });
     return () => data.subscription.unsubscribe();
   }, []);
 
@@ -80,5 +90,6 @@ export async function signInWithGoogle(): Promise<'signed-in' | 'cancelled'> {
 export async function signOut() {
   // Forget the Google account too, so the picker shows next time.
   await GoogleSignin.signOut().catch(() => {});
+  // Clears the stored session even when offline; the SIGNED_OUT event then clears cached data.
   await supabase.auth.signOut();
 }

@@ -4,14 +4,17 @@ import { useEffect } from 'react';
 import { useColorScheme } from 'react-native';
 
 import { AuthProvider, useAuth } from '@/lib/auth';
+import { QueryProvider } from '@/lib/query';
 
 SplashScreen.preventAutoHideAsync();
 
 export default function RootLayout() {
   return (
-    <AuthProvider>
-      <RootStack />
-    </AuthProvider>
+    <QueryProvider>
+      <AuthProvider>
+        <RootStack />
+      </AuthProvider>
+    </QueryProvider>
   );
 }
 
@@ -28,12 +31,13 @@ function RootStack() {
 
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <Stack>
+      <Stack screenOptions={{ headerShown: false }}>
         <Stack.Protected guard={!session}>
-          <Stack.Screen name="sign-in" options={{ headerShown: false }} />
+          <Stack.Screen name="sign-in" />
         </Stack.Protected>
+        {/* Everything in (app) needs a signed-in user. */}
         <Stack.Protected guard={!!session}>
-          <Stack.Screen name="index" options={{ title: 'G Track' }} />
+          <Stack.Screen name="(app)" />
         </Stack.Protected>
       </Stack>
     </ThemeProvider>
