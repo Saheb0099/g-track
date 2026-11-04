@@ -29,7 +29,14 @@ export function saveDueMs(schedule: Schedule): number {
 /** Also save after moving this far, so trips show as a path rather than far-apart dots. */
 export const SAVE_AFTER_METERS = 250;
 
-export type Fix = { lat: number; lng: number; time: number; accuracy?: number | null };
+export type Fix = {
+  lat: number;
+  lng: number;
+  time: number;
+  accuracy?: number | null;
+  /** Believed as part of a trip (see judgeFix), so the next rough jump needn't wait. */
+  trip?: boolean;
+};
 
 export function distanceMeters(a: Fix, b: Fix): number {
   const R = 6_371_000;
@@ -57,8 +64,36 @@ const CONFIRM_ACCURACY_M = 100;
 const CONFIRM_AFTER_MS = 2 * 60_000;
 /** After this long without a good fix, the last good one no longer vouches for anything. */
 const GOOD_FIX_TRUST_MS = 30 * 60_000;
+/**
+ * On a train or bus, fixes are often rough (a metal coach) and each lands a kilometre or more
+ * further on, so none ever confirms the one before. A waiting fix is instead believed when the
+ * next one, at least this much later, carries on away from the last good spot.
+ */
+const TRIP_STEP_MS = 30_000;
+/** Once on a trip, rough jumps this soon after the last good fix are believed straight away. */
+const TRIP_TRUST_MS = 10 * 60_000;
 
 export type Verdict = 'accept' | 'reject' | 'hold';
+
+export type Judgement = {
+  verdict: Verdict;
+  reason: string;
+  /** Part of a trip; remembered with the fix. */
+  trip?: boolean;
+  /** The waiting (held) fix turned out to be the start of a trip: save it too. */
+  keepHeld?: boolean;
+};
+
+/** Steady movement on from the waiting fix, at a believable speed and further from where it began. */
+function movesOn(lastGood: Fix | null, held: Fix | null, next: Fix, acc: number): boolean {
+  if (!lastGood || !held || next.time - held.time < TRIP_STEP_MS) return false;
+  const heldAcc = held.accuracy ?? MAX_ACCURACY_M;
+  const seconds = (next.time - held.time) / 1000;
+  const reachable = distanceMeters(held, next) <= heldAcc + acc + MAX_SPEED_MS * seconds;
+  // Further on by more than either fix's error: a glitch that jumps out and back fails this.
+  const progress = distanceMeters(lastGood, next) - distanceMeters(lastGood, held);
+  return reachable && progress > Math.max(heldAcc, acc);
+}
 
 /**
  * Judges a new fix against the last good one (and a held jump candidate, if any).
@@ -66,7 +101,7 @@ export type Verdict = 'accept' | 'reject' | 'hold';
  * - hold: a big jump from a shaky fix; remember it, and accept only if a later fix agrees.
  * - reject: rough, or physically impossible.
  */
-export function judgeFix(lastGood: Fix | null, held: Fix | null, next: Fix): { verdict: Verdict; reason: string } {
+export function judgeFix(lastGood: Fix | null, held: Fix | null, next: Fix): Judgement {
   const acc = next.accuracy ?? MAX_ACCURACY_M;
   if (acc > MAX_ACCURACY_M) return { verdict: 'reject', reason: `rough fix ±${Math.round(acc)} m` };
 
@@ -81,9 +116,11 @@ export function judgeFix(lastGood: Fix | null, held: Fix | null, next: Fix): { v
   // Nothing recent to compare with (new install, sign-in, a long gap): start from a precise fix.
   if (!lastGood || next.time - lastGood.time > GOOD_FIX_TRUST_MS) {
     if (acc <= PRECISE_M) return { verdict: 'accept', reason: 'precise first fix' };
-    return confirmsHeld
-      ? { verdict: 'accept', reason: 'first fix confirmed by a second fix' }
-      : { verdict: 'hold', reason: `shaky first fix ±${Math.round(acc)} m` };
+    if (confirmsHeld) return { verdict: 'accept', reason: 'first fix confirmed by a second fix' };
+    if (movesOn(lastGood, held, next, acc)) {
+      return { verdict: 'accept', reason: 'moving on from a waiting fix', trip: true, keepHeld: true };
+    }
+    return { verdict: 'hold', reason: `shaky first fix ±${Math.round(acc)} m` };
   }
 
   const dist = distanceMeters(lastGood, next);
@@ -94,11 +131,17 @@ export function judgeFix(lastGood: Fix | null, held: Fix | null, next: Fix): { v
   }
 
   if (dist > BIG_JUMP_M && acc > PRECISE_M) {
-    return confirmsHeld
-      ? { verdict: 'accept', reason: 'jump confirmed by a second fix' }
-      : { verdict: 'hold', reason: `unconfirmed jump ${Math.round(dist)} m at ±${Math.round(acc)} m` };
+    if (lastGood.trip && next.time - lastGood.time <= TRIP_TRUST_MS) {
+      return { verdict: 'accept', reason: 'trip continues', trip: true };
+    }
+    if (confirmsHeld) return { verdict: 'accept', reason: 'jump confirmed by a second fix' };
+    if (movesOn(lastGood, held, next, acc)) {
+      return { verdict: 'accept', reason: 'moving on from a waiting fix', trip: true, keepHeld: true };
+    }
+    return { verdict: 'hold', reason: `unconfirmed jump ${Math.round(dist)} m at ±${Math.round(acc)} m` };
   }
-  return { verdict: 'accept', reason: 'consistent' };
+  // Still moving along: stay on the trip, so a faster stretch later doesn't have to wait.
+  return { verdict: 'accept', reason: 'consistent', trip: !!lastGood.trip && dist >= SAVE_AFTER_METERS };
 }
 
 export function shouldSave(last: Fix | null, next: Fix, schedule: Schedule): boolean {

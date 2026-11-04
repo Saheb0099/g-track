@@ -63,6 +63,8 @@ const FRESH_FIX_ATTEMPTS: { accuracy: Location.Accuracy; timeoutMs: number; labe
   { accuracy: Location.Accuracy.High, timeoutMs: 18_000, label: 'gps' },
   { accuracy: Location.Accuracy.Balanced, timeoutMs: 8_000, label: 'network' },
 ];
+/** A waiting jump this recent may be a trip starting (see recordCurrentPosition). */
+const HELD_FRESH_MS = 10 * 60_000;
 /** A "current" fix older than this was really a cached one. */
 const STALE_FIX_MS = 60_000;
 /**
@@ -126,6 +128,19 @@ async function batteryPercent(): Promise<number | null> {
   return level >= 0 ? Math.round(level * 100) : null;
 }
 
+function fixToPoint(fix: Fix, battery: number | null): PendingPoint {
+  return {
+    recorded_at: new Date(fix.time).toISOString(),
+    lat: fix.lat,
+    lng: fix.lng,
+    accuracy_m: fix.accuracy ?? null,
+    speed: null,
+    heading: null,
+    source: 'fused',
+    battery_pct: battery,
+  };
+}
+
 function toPoint(
   location: Location.LocationObject,
   source: PendingPoint['source'],
@@ -161,14 +176,24 @@ export async function recordReading(
   };
 
   const [lastGood, held] = await Promise.all([getState<Fix>('last_good'), getState<Fix>('held_jump')]);
-  const { verdict, reason } = judgeFix(lastGood, held, fix);
+  const { verdict, reason, trip, keepHeld } = judgeFix(lastGood, held, fix);
   if (verdict !== 'accept') {
     if (verdict === 'hold') await setState('held_jump', fix);
     await logEvent(`${verdict} fix: ${reason}`);
     return { saved: false, verdict };
   }
-  await setState('last_good', fix);
+  if (trip) await logEvent(`accept fix: ${reason}`);
+  await setState('last_good', { ...fix, trip: !!trip });
   if (held) await setState('held_jump', null);
+
+  // The waiting fix was where a trip began: save it too, so the route has no gap.
+  if (keepHeld && held) {
+    const lastBefore = await getState<Fix>('last_saved');
+    if (!lastBefore || held.time > lastBefore.time) {
+      await enqueue(fixToPoint(held, await batteryPercent()));
+      await setState('last_saved', held);
+    }
+  }
 
   const last = await getState<Fix>('last_saved');
   // A forced save (the app was just opened) still skips a reading within a minute of the last one.
@@ -229,13 +254,20 @@ async function freshFix(accuracy: Location.Accuracy, timeoutMs: number, label: s
  * stops producing fixes while the phone lies still, so the last fix is where the phone still is.
  */
 export async function recordCurrentPosition(options: { stillHere?: boolean } = {}) {
+  // A jump waiting to be confirmed may be the start of a trip. Re-sending an older position as
+  // "now" could then show someone still at the station, so older fixes aren't re-stamped and the
+  // last good one isn't repeated; a short "last seen" gap is better than a wrong place.
+  const held = await getState<Fix>('held_jump');
+  const waiting = !!held && Date.now() - held.time < HELD_FRESH_MS;
+  const restamp = (timestamp: number) => !!options.stillHere && !(waiting && timestamp <= held.time);
+
   for (const attempt of FRESH_FIX_ATTEMPTS) {
     const fresh = await freshFix(attempt.accuracy, attempt.timeoutMs, attempt.label);
     if (!fresh) continue;
     // While the phone is still, Android can answer with its previous fix. When a point is due,
     // that's still where the phone is, so it's saved as of now rather than skipped as a repeat.
     const stale = Date.now() - fresh.timestamp > STALE_FIX_MS;
-    const reading = options.stillHere && stale ? { ...fresh, timestamp: Date.now() } : fresh;
+    const reading = stale && restamp(fresh.timestamp) ? { ...fresh, timestamp: Date.now() } : fresh;
     const { saved, verdict } = await recordReading(reading, { force: true, source: stale ? 'last_known' : 'fused' });
     await logEvent(
       `${attempt.label} fix ±${Math.round(fresh.coords.accuracy ?? 0)}m stale=${stale} ${verdict} saved=${saved}`,
@@ -246,7 +278,7 @@ export async function recordCurrentPosition(options: { stillHere?: boolean } = {
 
   const cached = await Location.getLastKnownPositionAsync(options.stillHere ? {} : { maxAge: LAST_KNOWN_MAX_AGE_MS });
   if (cached) {
-    const reading = options.stillHere ? { ...cached, timestamp: Date.now() } : cached;
+    const reading = restamp(cached.timestamp) ? { ...cached, timestamp: Date.now() } : cached;
     const { saved, verdict } = await recordReading(reading, { source: 'last_known', force: true });
     await logEvent(`cached fix from ${new Date(cached.timestamp).toISOString()} ${verdict} saved=${saved}`);
     if (verdict === 'accept') return;
@@ -254,8 +286,13 @@ export async function recordCurrentPosition(options: { stillHere?: boolean } = {
     await logEvent('no cached fix');
   }
 
-  // Nothing believable from the phone: the 5-minute point repeats the last good position.
-  if (options.stillHere) await recordLastGood();
+  // Nothing believable from the phone: the point repeats the last good position.
+  if (!options.stillHere) return;
+  if (waiting) {
+    await logEvent('a jump is waiting to be confirmed; not repeating the last good position');
+    return;
+  }
+  await recordLastGood();
 }
 
 /** Called with the app on screen. */

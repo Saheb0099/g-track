@@ -60,7 +60,8 @@
     "test:db": "node scripts/test-db.mjs",
     "gen:types": "supabase gen types --remote --schema public > src/lib/database.types.ts",
     "postinstall": "patch-package",
-    "patch:location": "patch-package expo-location --exclude \"^package\\\\.json$|/build/\""
+    "patch:location": "patch-package expo-location --exclude \"^package\\\\.json$|/build/\"",
+    "test:rules": "node --experimental-strip-types --no-warnings scripts/test-rules.mjs"
   },
   "private": true,
   "expo": {
