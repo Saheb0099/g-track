@@ -9,6 +9,7 @@ import type { GroupSummary, Member } from '@/features/groups/api';
 import { MemberRow } from '@/features/groups/member-row';
 import { useSharingStatus } from '@/features/location/sharing-status';
 import type { LivePosition } from '@/features/map/api';
+import { staleAfterMs } from '@/features/map/group-map';
 import { type as typeStyles, useColors } from '@/lib/theme';
 
 type Props = {
@@ -28,8 +29,7 @@ export function PeoplePanel({ group, members, positions, now, meId, onSelect }: 
   const byUser = new globalThis.Map(positions.map((p) => [p.userId, p]));
   const openSettings = () => router.push({ pathname: '/group/[id]/settings', params: { id: group.id } });
 
-  const dot =
-    status?.tone === 'ok' ? colors.success : status?.tone === 'attention' ? colors.warning : colors.muted;
+  const dot = status?.tone === 'ok' ? colors.success : status?.tone === 'attention' ? colors.warning : colors.muted;
 
   return (
     <View style={styles.container}>
@@ -67,6 +67,7 @@ export function PeoplePanel({ group, members, positions, now, meId, onSelect }: 
               now={now}
               isYou={m.userId === meId}
               isAdmin={m.userId === group.adminId}
+              staleMs={staleAfterMs(group.saveEveryMin)}
               onPress={() => onSelect(m.userId)}
             />
           </Fragment>

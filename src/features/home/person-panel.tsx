@@ -21,6 +21,7 @@ type Props = {
   member: Member;
   position?: LivePosition;
   now: number;
+  staleMs: number;
   isYou: boolean;
   following: boolean;
   onToggleFollow: () => void;
@@ -28,7 +29,17 @@ type Props = {
 };
 
 /** The sheet with one person selected: how fresh their location is, and quick actions. */
-export function PersonPanel({ groupId, member, position, now, isYou, following, onToggleFollow, onClose }: Props) {
+export function PersonPanel({
+  groupId,
+  member,
+  position,
+  now,
+  staleMs,
+  isYou,
+  following,
+  onToggleFollow,
+  onClose,
+}: Props) {
   const colors = useColors();
   const today = useMemo(() => recentDays()[0], []);
   const history = useDayHistory(member.userId, today);
@@ -44,8 +55,8 @@ export function PersonPanel({ groupId, member, position, now, isYou, following, 
   const subtitle = position
     ? hereSince
       ? `Here since ${clock(hereSince)}`
-      : statusLine(member, position, now)
-    : statusLine(member, position, now);
+      : statusLine(member, position, now, staleMs)
+    : statusLine(member, position, now, staleMs);
   const battery = position?.batteryPct;
 
   return (

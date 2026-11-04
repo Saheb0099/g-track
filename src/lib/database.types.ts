@@ -76,21 +76,27 @@ export type Database = {
       groups: {
         Row: {
           admin_id: string
+          check_every_min: number
           created_at: string
           id: string
           name: string
+          save_every_min: number
         }
         Insert: {
           admin_id: string
+          check_every_min?: number
           created_at?: string
           id?: string
           name: string
+          save_every_min?: number
         }
         Update: {
           admin_id?: string
+          check_every_min?: number
           created_at?: string
           id?: string
           name?: string
+          save_every_min?: number
         }
         Relationships: [
           {
@@ -263,6 +269,14 @@ export type Database = {
         Returns: undefined
       }
       restore_my_account: { Args: never; Returns: boolean }
+      set_group_timing: {
+        Args: {
+          p_check_every_min: number
+          p_group_id: string
+          p_save_every_min: number
+        }
+        Returns: undefined
+      }
       transfer_admin: {
         Args: { p_group_id: string; p_user_id: string }
         Returns: undefined

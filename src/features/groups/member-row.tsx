@@ -5,19 +5,18 @@ import { Avatar } from '@/components/avatar';
 import { Battery } from '@/components/battery';
 import type { Member } from '@/features/groups/api';
 import type { LivePosition } from '@/features/map/api';
-import { STALE_MS } from '@/features/map/group-map';
 import { type as typeStyles, useColors } from '@/lib/theme';
 import { timeAgo } from '@/lib/time';
 
 /** "2 min ago · ±8 m", "Paused", "Location is off"… for a person's row. */
-export function statusLine(member: Member, position: LivePosition | undefined, now: number): string {
+export function statusLine(member: Member, position: LivePosition | undefined, now: number, staleMs: number): string {
   if (member.deletedAt) return 'Account deleted';
   if (!member.sharingEnabled) return 'Sharing paused';
   if (member.status === 'location_off') return 'Location is off';
   if (member.status === 'permission_missing') return 'Location permission missing';
   if (!position) return member.lastSeenAt ? `Last seen ${timeAgo(member.lastSeenAt, now)}` : 'No location yet';
   const ago = timeAgo(position.recordedAt, now);
-  const stale = now - Date.parse(position.recordedAt) > STALE_MS;
+  const stale = now - Date.parse(position.recordedAt) > staleMs;
   const accuracy = position.accuracyM != null ? ` · ±${Math.round(position.accuracyM)} m` : '';
   return stale ? `Last seen ${ago}` : `${ago[0].toUpperCase()}${ago.slice(1)}${accuracy}`;
 }
@@ -28,13 +27,15 @@ type Props = {
   now: number;
   isYou: boolean;
   isAdmin: boolean;
+  /** When their position counts as old (see staleAfterMs). */
+  staleMs: number;
   onPress?: () => void;
   /** Replaces the battery on the right (e.g. an options button). */
   trailing?: ReactNode;
 };
 
 /** A person in a list: avatar, name, live status and battery. */
-export function MemberRow({ member, position, now, isYou, isAdmin, onPress, trailing }: Props) {
+export function MemberRow({ member, position, now, isYou, isAdmin, staleMs, onPress, trailing }: Props) {
   const colors = useColors();
   const paused = !member.sharingEnabled;
   const right =
@@ -61,7 +62,7 @@ export function MemberRow({ member, position, now, isYou, isAdmin, onPress, trai
         </Text>
         <Text style={[typeStyles.caption, { color: colors.muted }]} numberOfLines={1}>
           {isAdmin ? 'Admin · ' : ''}
-          {statusLine(member, position, now)}
+          {statusLine(member, position, now, staleMs)}
         </Text>
       </View>
       {right}

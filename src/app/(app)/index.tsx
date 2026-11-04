@@ -18,7 +18,7 @@ import { takePendingInvite } from '@/features/groups/pending-invite';
 import { PeoplePanel } from '@/features/home/people-panel';
 import { PersonPanel } from '@/features/home/person-panel';
 import { useLivePositions } from '@/features/map/api';
-import { GroupMap, type GroupMapHandle } from '@/features/map/group-map';
+import { GroupMap, staleAfterMs, type GroupMapHandle } from '@/features/map/group-map';
 import { useMapIsDark } from '@/features/map/styles';
 import { useMyProfile } from '@/features/profile/api';
 import { useAuth } from '@/lib/auth';
@@ -92,6 +92,7 @@ export default function Home() {
   }
 
   const selected = members.data?.find((m) => m.userId === selectedId);
+  const staleMs = staleAfterMs(group?.saveEveryMin ?? 5);
   const topBar = safe.top + 12;
   // Sheet heights, measured in the area above the navigation bar. The person view needs more
   // room than the people list; fully open stops just under the top bar.
@@ -134,6 +135,7 @@ export default function Home() {
           selectedId={selectedId}
           onSelect={select}
           insets={mapInsets}
+          staleMs={staleMs}
         />
       </BlurTargetView>
 
@@ -224,6 +226,7 @@ export default function Home() {
                   member={selected}
                   position={positions.find((p) => p.userId === selected.userId)}
                   now={now}
+                  staleMs={staleMs}
                   isYou={selected.userId === meId}
                   following={followId === selected.userId}
                   onToggleFollow={() => setFollowId(followId === selected.userId ? null : selected.userId)}

@@ -5,7 +5,15 @@ import { supabase } from '@/lib/supabase';
 
 export type DeviceStatus = Database['public']['Enums']['device_status'];
 
-export type GroupSummary = { id: string; name: string; adminId: string; memberCount: number };
+export type GroupSummary = {
+  id: string;
+  name: string;
+  adminId: string;
+  memberCount: number;
+  /** The admin's timing for members' phones, in minutes. */
+  checkEveryMin: number;
+  saveEveryMin: number;
+};
 
 export type Member = {
   userId: string;
@@ -68,7 +76,7 @@ export function useMyGroups() {
     queryFn: async (): Promise<GroupSummary[]> => {
       const { data, error } = await supabase
         .from('groups')
-        .select('id, name, admin_id, group_members(count)')
+        .select('id, name, admin_id, check_every_min, save_every_min, group_members(count)')
         .order('created_at');
       if (error) throw error;
       return data.map((g) => ({
@@ -76,6 +84,8 @@ export function useMyGroups() {
         name: g.name,
         adminId: g.admin_id,
         memberCount: g.group_members[0]?.count ?? 0,
+        checkEveryMin: g.check_every_min,
+        saveEveryMin: g.save_every_min,
       }));
     },
   });
@@ -86,9 +96,21 @@ export function useGroup(id: string) {
   return useQuery({
     queryKey: keys.group(id),
     queryFn: async () => {
-      const { data, error } = await supabase.from('groups').select('id, name, admin_id').eq('id', id).maybeSingle();
+      const { data, error } = await supabase
+        .from('groups')
+        .select('id, name, admin_id, check_every_min, save_every_min')
+        .eq('id', id)
+        .maybeSingle();
       if (error) throw error;
-      return data && { id: data.id, name: data.name, adminId: data.admin_id };
+      return (
+        data && {
+          id: data.id,
+          name: data.name,
+          adminId: data.admin_id,
+          checkEveryMin: data.check_every_min,
+          saveEveryMin: data.save_every_min,
+        }
+      );
     },
   });
 }
@@ -203,6 +225,27 @@ export function useRenameGroup(groupId: string) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: keys.group(groupId) });
       queryClient.invalidateQueries({ queryKey: keys.groups });
+    },
+  });
+}
+
+/** Admin only. Members' phones switch to it at their next 5-minute check-in. */
+export function useSetGroupTiming(groupId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ checkEveryMin, saveEveryMin }: { checkEveryMin: number; saveEveryMin: number }) => {
+      const { error } = await supabase.rpc('set_group_timing', {
+        p_group_id: groupId,
+        p_check_every_min: checkEveryMin,
+        p_save_every_min: saveEveryMin,
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: keys.group(groupId) });
+      queryClient.invalidateQueries({ queryKey: keys.groups });
+      // This phone follows its groups' timing too, so re-sync tracking now.
+      queryClient.invalidateQueries({ queryKey: ['tracking'] });
     },
   });
 }

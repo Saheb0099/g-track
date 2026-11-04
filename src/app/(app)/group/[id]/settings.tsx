@@ -16,11 +16,13 @@ import {
   useMembers,
   useRegenerateCode,
   useRenameGroup,
+  useSetGroupTiming,
   useTransferAdmin,
   type Member,
 } from '@/features/groups/api';
 import { shareInvite } from '@/features/groups/invite';
 import { MemberRow } from '@/features/groups/member-row';
+import { staleAfterMs } from '@/features/map/group-map';
 import { useAuth } from '@/lib/auth';
 import { friendlyError } from '@/lib/errors';
 import { fonts, radius, type as typeStyles, useColors } from '@/lib/theme';
@@ -44,6 +46,7 @@ export default function GroupSettings() {
   const kick = useKickMember(id);
   const transfer = useTransferAdmin(id);
   const leave = useLeaveGroup(id);
+  const timing = useSetGroupTiming(id);
   const [now] = useState(() => Date.now());
 
   const close = () => router.back();
@@ -68,6 +71,7 @@ export default function GroupSettings() {
 
   const groupName = group.data.name;
   const adminId = group.data.adminId;
+  const staleMs = staleAfterMs(group.data.saveEveryMin);
   const memberList = members.data ?? [];
   const admin = memberList.find((m) => m.userId === adminId);
   const others = memberList.filter((m) => m.userId !== me);
@@ -129,7 +133,9 @@ export default function GroupSettings() {
       contentContainerStyle={[styles.container, { paddingTop: safe.top + 12, paddingBottom: safe.bottom + 32 }]}>
       <View style={styles.header}>
         <View style={[styles.badge, { backgroundColor: colors.accent }]}>
-          <Text style={[typeStyles.heading, { color: colors.onAccent, fontSize: 18 }]}>{groupName[0].toUpperCase()}</Text>
+          <Text style={[typeStyles.heading, { color: colors.onAccent, fontSize: 18 }]}>
+            {groupName[0].toUpperCase()}
+          </Text>
         </View>
         <View style={styles.flex}>
           <Text style={[typeStyles.title, { color: colors.text, fontSize: 24 }]} numberOfLines={1}>
@@ -199,12 +205,17 @@ export default function GroupSettings() {
                 member={member}
                 now={now}
                 isYou={member.userId === me}
+                staleMs={staleMs}
                 // The Admin badge on the right says it; no need to repeat it in the status line.
                 isAdmin={false}
                 trailing={
                   member.userId === adminId ? (
                     <View style={[styles.adminChip, { backgroundColor: colors.accentFill }]}>
-                      <Text style={[typeStyles.caption, { color: colors.accentText, fontFamily: fonts.bold, fontSize: 12 }]}>
+                      <Text
+                        style={[
+                          typeStyles.caption,
+                          { color: colors.accentText, fontFamily: fonts.bold, fontSize: 12 },
+                        ]}>
                         Admin
                       </Text>
                     </View>
@@ -227,6 +238,19 @@ export default function GroupSettings() {
         </Card>
       </View>
 
+      <View style={styles.section}>
+        <SectionLabel>Location timing</SectionLabel>
+        {/* Keyed by the saved timing so the controls reset after saving. */}
+        <TimingForm
+          key={`${group.data.checkEveryMin}-${group.data.saveEveryMin}`}
+          checkEveryMin={group.data.checkEveryMin}
+          saveEveryMin={group.data.saveEveryMin}
+          editable={isAdmin}
+          saving={timing.isPending}
+          onSave={(next) => timing.mutate(next, { onError: showError })}
+        />
+      </View>
+
       {isAdmin && (
         <View style={styles.section}>
           <SectionLabel>Name</SectionLabel>
@@ -242,6 +266,99 @@ export default function GroupSettings() {
 
       <Button title="Leave group" variant="danger" loading={leave.isPending} onPress={confirmLeave} />
     </ScrollView>
+  );
+}
+
+const MIN_MINUTES = 1;
+const MAX_MINUTES = 30;
+
+/** How often members' phones check and save their location. Only the admin can change it. */
+function TimingForm({
+  checkEveryMin,
+  saveEveryMin,
+  editable,
+  saving,
+  onSave,
+}: {
+  checkEveryMin: number;
+  saveEveryMin: number;
+  editable: boolean;
+  saving: boolean;
+  onSave: (timing: { checkEveryMin: number; saveEveryMin: number }) => void;
+}) {
+  const colors = useColors();
+  const [check, setCheck] = useState(checkEveryMin);
+  const [save, setSave] = useState(saveEveryMin);
+  const changed = check !== checkEveryMin || save !== saveEveryMin;
+
+  // Saving can't be more often than checking, so moving one past the other moves both.
+  function changeCheck(minutes: number) {
+    setCheck(minutes);
+    if (save < minutes) setSave(minutes);
+  }
+  function changeSave(minutes: number) {
+    setSave(minutes);
+    if (minutes < check) setCheck(minutes);
+  }
+
+  return (
+    <View style={styles.section}>
+      <Card>
+        <MinutesStepper label="Check location every" value={check} onChange={changeCheck} editable={editable} />
+        <RowDivider inset={14} />
+        <MinutesStepper label="Save location every" value={save} onChange={changeSave} editable={editable} />
+      </Card>
+      <Text style={[typeStyles.caption, { color: colors.muted }]}>
+        {editable
+          ? "Applies to everyone in the group. Checking more often uses more battery on everyone's phone. Hold − or + to change by 5."
+          : 'Only the admin can change this.'}
+      </Text>
+      {editable && changed && (
+        <Button
+          title="Save timing"
+          loading={saving}
+          onPress={() => onSave({ checkEveryMin: check, saveEveryMin: save })}
+        />
+      )}
+    </View>
+  );
+}
+
+function MinutesStepper({
+  label,
+  value,
+  onChange,
+  editable,
+}: {
+  label: string;
+  value: number;
+  onChange: (minutes: number) => void;
+  editable: boolean;
+}) {
+  const colors = useColors();
+  const set = (minutes: number) => onChange(Math.min(MAX_MINUTES, Math.max(MIN_MINUTES, minutes)));
+  const step = (icon: 'remove' | 'add', by: number, disabled: boolean) => (
+    <Pressable
+      onPress={() => set(value + by)}
+      onLongPress={() => set(value + by * 5)}
+      disabled={disabled}
+      hitSlop={6}
+      accessibilityRole="button"
+      accessibilityLabel={`${by < 0 ? 'Less' : 'More'} often`}
+      style={({ pressed }) => [
+        styles.stepButton,
+        { backgroundColor: colors.fill, opacity: disabled ? 0.35 : pressed ? 0.6 : 1 },
+      ]}>
+      <Ionicons name={icon} size={20} color={colors.text} />
+    </Pressable>
+  );
+  return (
+    <View style={styles.stepRow} accessible={!editable} accessibilityLabel={`${label} ${value} minutes`}>
+      <Text style={[typeStyles.bodyStrong, styles.flex, { color: colors.text }]}>{label}</Text>
+      {editable && step('remove', -1, value <= MIN_MINUTES)}
+      <Text style={[typeStyles.bodyStrong, styles.stepValue, { color: colors.text }]}>{value} min</Text>
+      {editable && step('add', 1, value >= MAX_MINUTES)}
+    </View>
   );
 }
 
@@ -284,4 +401,7 @@ const styles = StyleSheet.create({
   more: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
   renameRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 10 },
   saveButton: { height: 54, borderRadius: 16 },
+  stepRow: { minHeight: 60, flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 14 },
+  stepButton: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
+  stepValue: { minWidth: 56, textAlign: 'center' },
 });

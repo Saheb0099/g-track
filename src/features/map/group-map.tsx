@@ -9,8 +9,13 @@ import { boundsAround, circlePolygon } from '@/features/map/geo';
 import { useMapStyle } from '@/features/map/styles';
 import { fonts, useColors } from '@/lib/theme';
 
-/** A position older than this is drawn faded: the phone has stopped reporting. */
-export const STALE_MS = 20 * 60_000;
+/**
+ * A position older than this is drawn faded: the phone has stopped reporting. That's three
+ * missed saves at the group's timing, and never under 20 minutes.
+ */
+export function staleAfterMs(saveEveryMin: number) {
+  return Math.max(20, 3 * saveEveryMin) * 60_000;
+}
 /** Accuracy rings are only worth drawing when the fix is rough. */
 const MIN_RING_M = 25;
 
@@ -30,10 +35,11 @@ type Props = {
   onSelect: (userId: string | null) => void;
   /** Space covered by floating UI, kept clear when framing everyone. */
   insets: { top: number; bottom: number };
+  staleMs: number;
 };
 
 export const GroupMap = forwardRef<GroupMapHandle, Props>(function GroupMap(
-  { positions, members, now, meId, selectedId, onSelect, insets },
+  { positions, members, now, meId, selectedId, onSelect, insets, staleMs },
   ref,
 ) {
   const colors = useColors();
@@ -116,7 +122,7 @@ export const GroupMap = forwardRef<GroupMapHandle, Props>(function GroupMap(
       {positions.map((p) => {
         const member = people.get(p.userId);
         const name = member?.displayName ?? '?';
-        const stale = now - Date.parse(p.recordedAt) > STALE_MS;
+        const stale = now - Date.parse(p.recordedAt) > staleMs;
         const selected = p.userId === selectedId;
         const label = p.userId === meId ? 'You' : name.split(' ')[0];
         const size = selected ? 54 : 46;

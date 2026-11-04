@@ -1,12 +1,32 @@
 // When a location reading becomes a saved point. Kept free of native imports so it's easy to test.
 
-/** Save at least this often while sitting still. */
-export const SAVE_EVERY_MS = 5 * 60_000;
-/** Readings arrive about once a minute; this slack stops a 4:59 gap from waiting a whole extra minute. */
-const SAVE_EVERY_SLACK_MS = 30_000;
-/** A point is due once this long has passed since the last saved one. */
-export const SAVE_DUE_MS = SAVE_EVERY_MS - SAVE_EVERY_SLACK_MS;
-/** Also save after moving this far, so trips show as a path rather than dots 5 minutes apart. */
+/**
+ * How often the phone asks for a reading and how often a point is saved. Each group's admin
+ * picks these (1 to 30 minutes); a phone in several groups follows the most frequent.
+ */
+export type Schedule = { checkEveryMs: number; saveEveryMs: number };
+
+/** Used with no group yet, and the timing new groups start with. */
+export const DEFAULT_SCHEDULE: Schedule = { checkEveryMs: 60_000, saveEveryMs: 5 * 60_000 };
+
+/** The most frequent timing across your groups, as stored in the database (minutes). */
+export function scheduleFor(groups: { check_every_min: number; save_every_min: number }[]): Schedule {
+  if (groups.length === 0) return DEFAULT_SCHEDULE;
+  return {
+    checkEveryMs: Math.min(...groups.map((g) => g.check_every_min)) * 60_000,
+    saveEveryMs: Math.min(...groups.map((g) => g.save_every_min)) * 60_000,
+  };
+}
+
+/**
+ * A point is due once this long has passed since the last saved one. Readings arrive about
+ * once per check; the slack stops a gap a few seconds short from waiting a whole extra check.
+ */
+export function saveDueMs(schedule: Schedule): number {
+  return schedule.saveEveryMs - Math.min(30_000, schedule.checkEveryMs / 2);
+}
+
+/** Also save after moving this far, so trips show as a path rather than far-apart dots. */
 export const SAVE_AFTER_METERS = 250;
 
 export type Fix = { lat: number; lng: number; time: number; accuracy?: number | null };
@@ -81,10 +101,10 @@ export function judgeFix(lastGood: Fix | null, held: Fix | null, next: Fix): { v
   return { verdict: 'accept', reason: 'consistent' };
 }
 
-export function shouldSave(last: Fix | null, next: Fix): boolean {
+export function shouldSave(last: Fix | null, next: Fix, schedule: Schedule): boolean {
   if (!last) return true;
   if (next.time <= last.time) return false;
-  if (next.time - last.time >= SAVE_DUE_MS) return true;
+  if (next.time - last.time >= saveDueMs(schedule)) return true;
   // A fuzzy fix can look like movement; only count distance beyond the reading's own error.
   return distanceMeters(last, next) >= SAVE_AFTER_METERS + (next.accuracy ?? 0);
 }

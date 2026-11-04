@@ -6,27 +6,38 @@ import * as TaskManager from 'expo-task-manager';
 import GtrackAlarm from '../../../modules/gtrack-alarm';
 
 import { clearAll, enqueue, getState, logEvent, setState, type PendingPoint } from '@/features/location/queue';
-import { judgeFix, SAVE_DUE_MS, SAVE_EVERY_MS, shouldSave, type Fix, type Verdict } from '@/features/location/rules';
+import {
+  DEFAULT_SCHEDULE,
+  judgeFix,
+  saveDueMs,
+  scheduleFor,
+  shouldSave,
+  type Fix,
+  type Schedule,
+  type Verdict,
+} from '@/features/location/rules';
 import { reportStatus, type DeviceStatus } from '@/features/location/status';
 import { flushQueue } from '@/features/location/upload';
+import { supabase } from '@/lib/supabase';
 
 export const LOCATION_TASK = 'gtrack-location';
 
-// A point every 5 minutes must not depend on the location service alone: Google's fused
-// provider stops producing fixes while the phone lies still, and phone makers sometimes kill
-// the service. Two independent wake-ups therefore "check in" (see checkIn):
+// Saving on time must not depend on the location service alone: Google's fused provider
+// stops producing fixes while the phone lies still, and phone makers sometimes kill the
+// service. Two independent wake-ups therefore "check in" (see checkIn):
 //  - an exact alarm every 5 minutes (native module modules/gtrack-alarm), which also resumes
-//    after a reboot or app update;
+//    after a reboot or app update, whatever timing the groups chose;
 //  - a WorkManager job about every 15 minutes, as a backstop if alarms are ever withheld.
 export const HEARTBEAT_TASK = 'gtrack-heartbeat';
 const HEARTBEAT_MINUTES = 15;
+const ALARM_EVERY_MS = 5 * 60_000;
 
-// Readings about once a minute at high accuracy: Android's fused provider uses GPS when it has
-// a signal and falls back to Wi-Fi and cell towers when not (indoors). Accuracy over battery,
-// as the user chose. The save rule then thins the readings out.
+// A reading every "check" interval at high accuracy: Android's fused provider uses GPS when it
+// has a signal and falls back to Wi-Fi and cell towers when not (indoors). Accuracy over
+// battery, as the user chose. The save rule then thins the readings out.
 const UPDATE_OPTIONS: Location.LocationTaskOptions = {
   accuracy: Location.Accuracy.High,
-  timeInterval: 60_000,
+  timeInterval: DEFAULT_SCHEDULE.checkEveryMs,
   distanceInterval: 0,
   // Never wait on a "turn on location" dialog: there may be no screen to show it on.
   mayShowUserSettingsDialog: false,
@@ -52,10 +63,10 @@ const FRESH_FIX_ATTEMPTS: { accuracy: Location.Accuracy; timeoutMs: number; labe
 /** A "current" fix older than this was really a cached one. */
 const STALE_FIX_MS = 60_000;
 /**
- * Readings normally arrive every minute. Silence this long means the service was stopped
- * (Android or the phone maker) or the provider paused, and the next check-in restarts it.
+ * Readings normally arrive once per check. Silence this much longer means the service was
+ * stopped (Android or the phone maker) or the provider paused, and the next check-in restarts it.
  */
-const SERVICE_SILENT_MS = 3 * 60_000;
+const SERVICE_SILENT_GRACE_MS = 2 * 60_000;
 // Time limits for each check-in step; together they stay under the 60 s the alarm's
 // background task is allowed. Saving a point needs the most: both fresh-fix attempts (26 s)
 // plus the cached fallback.
@@ -86,12 +97,37 @@ function statusFor(readiness: Readiness): DeviceStatus {
   return 'ok';
 }
 
+function updateOptions(schedule: Schedule): Location.LocationTaskOptions {
+  return { ...UPDATE_OPTIONS, timeInterval: schedule.checkEveryMs };
+}
+
+/** The timing this phone follows, as last fetched from its groups. */
+async function getSchedule(): Promise<Schedule> {
+  return (await getState<Schedule>('schedule')) ?? DEFAULT_SCHEDULE;
+}
+
+/** Fetches your groups' timing and remembers it. Returns whether it changed; offline it throws. */
+async function refreshSchedule(): Promise<boolean> {
+  const { data, error } = await supabase.from('groups').select('check_every_min, save_every_min');
+  if (error) throw error;
+  const next = scheduleFor(data);
+  const current = await getSchedule();
+  if (next.checkEveryMs === current.checkEveryMs && next.saveEveryMs === current.saveEveryMs) return false;
+  await setState('schedule', next);
+  await logEvent(`timing: check every ${next.checkEveryMs / 60_000} min, save every ${next.saveEveryMs / 60_000} min`);
+  return true;
+}
+
 async function batteryPercent(): Promise<number | null> {
   const level = await Battery.getBatteryLevelAsync().catch(() => -1);
   return level >= 0 ? Math.round(level * 100) : null;
 }
 
-function toPoint(location: Location.LocationObject, source: PendingPoint['source'], battery: number | null): PendingPoint {
+function toPoint(
+  location: Location.LocationObject,
+  source: PendingPoint['source'],
+  battery: number | null,
+): PendingPoint {
   const { latitude, longitude, accuracy, speed, heading } = location.coords;
   return {
     recorded_at: new Date(location.timestamp).toISOString(),
@@ -133,7 +169,7 @@ export async function recordReading(
 
   const last = await getState<Fix>('last_saved');
   // A forced save (the app was just opened) still skips a reading within a minute of the last one.
-  const keep = options.force ? !last || fix.time - last.time >= 60_000 : shouldSave(last, fix);
+  const keep = options.force ? !last || fix.time - last.time >= 60_000 : shouldSave(last, fix, await getSchedule());
   if (!keep) return { saved: false, verdict };
 
   const battery = options.battery !== undefined ? options.battery : await batteryPercent();
@@ -223,14 +259,14 @@ export async function recordCurrentPosition(options: { stillHere?: boolean } = {
 export async function startTracking() {
   // Wake-ups first: scheduling them always works, while starting the location service can be
   // refused (Android blocks starting it while the app isn't on screen).
-  if (!GtrackAlarm.isRunning()) GtrackAlarm.start(SAVE_EVERY_MS);
+  if (!GtrackAlarm.isRunning()) GtrackAlarm.start(ALARM_EVERY_MS);
   else GtrackAlarm.ensure();
   if (!(await TaskManager.isTaskRegisteredAsync(HEARTBEAT_TASK))) {
     await BackgroundTask.registerTaskAsync(HEARTBEAT_TASK, { minimumInterval: HEARTBEAT_MINUTES });
   }
   // Always (re)start: "registered" stays true after the system stops the service (e.g. an app
   // update or the phone maker's battery saver), and starting a running service is harmless.
-  await Location.startLocationUpdatesAsync(LOCATION_TASK, UPDATE_OPTIONS);
+  await Location.startLocationUpdatesAsync(LOCATION_TASK, updateOptions(await getSchedule()));
 }
 
 export async function stopTracking() {
@@ -248,20 +284,21 @@ export async function stopTracking() {
  * if the system stopped it, save a point if one is due, then upload.
  */
 export async function checkIn(reason: 'alarm' | 'heartbeat') {
+  const schedule = await getSchedule();
   const last = await getState<Fix>('last_saved');
-  const due = !last || Date.now() - last.time >= SAVE_DUE_MS;
+  const due = !last || Date.now() - last.time >= saveDueMs(schedule);
   // "Registered" survives the service being stopped by the system, so also judge by whether
   // readings are actually arriving.
   const registered = await Location.hasStartedLocationUpdatesAsync(LOCATION_TASK);
   const lastReadingAt = (await getState<number>('last_reading_at')) ?? 0;
-  const silent = Date.now() - lastReadingAt > SERVICE_SILENT_MS;
+  const silent = Date.now() - lastReadingAt > schedule.checkEveryMs + SERVICE_SILENT_GRACE_MS;
   // The heartbeat job may be the only thing still running if the alarm chain was wiped.
   const rearmed = GtrackAlarm.ensure();
   await logEvent(
     `${reason}: registered=${registered}, readings silent=${silent}, point due=${due}, alarm re-armed=${rearmed}`,
   );
 
-  // The point comes first, so nothing below can stand in the way of the 5-minute record.
+  // The point comes first, so nothing below can stand in the way of it.
   if (due) {
     await withTimeout(recordCurrentPosition({ stillHere: true }), POINT_STEP_MS, `${reason}: saving point`);
   }
@@ -272,7 +309,7 @@ export async function checkIn(reason: 'alarm' | 'heartbeat') {
     // few things that let Android start a location service from the background; if refused,
     // the next wake-up or opening the app tries again.
     await withTimeout(
-      Location.startLocationUpdatesAsync(LOCATION_TASK, UPDATE_OPTIONS).then(() =>
+      Location.startLocationUpdatesAsync(LOCATION_TASK, updateOptions(schedule)).then(() =>
         logEvent(`${reason}: (re)started location service`),
       ),
       START_STEP_MS,
@@ -280,7 +317,15 @@ export async function checkIn(reason: 'alarm' | 'heartbeat') {
     );
   }
 
-  await withTimeout(flushQueue(), UPLOAD_STEP_MS, `${reason}: upload`);
+  // An admin's new timing reaches every phone here, within 5 minutes.
+  await withTimeout(Promise.all([flushQueue(), applyNewSchedule()]), UPLOAD_STEP_MS, `${reason}: upload`);
+}
+
+/** Picks up a changed group timing and restarts location checks at the new pace. */
+async function applyNewSchedule() {
+  if (await refreshSchedule()) {
+    await Location.startLocationUpdatesAsync(LOCATION_TASK, updateOptions(await getSchedule()));
+  }
 }
 
 /** Runs one check-in step, logging (not throwing) if it fails or takes too long. */
@@ -313,6 +358,8 @@ export async function syncTracking(sharingEnabled: boolean): Promise<Readiness> 
 
   const canTrack = sharingEnabled && readiness.foreground && readiness.background;
   if (canTrack) {
+    // Fetched first so the service starts at the groups' pace; offline, the remembered one is used.
+    await refreshSchedule().catch(() => {});
     // If Android refuses to start the service right now, the next sync or heartbeat retries.
     await startTracking().catch(() => {});
     if (readiness.servicesOn) await recordCurrentPosition().catch(() => {});

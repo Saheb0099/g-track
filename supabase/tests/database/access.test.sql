@@ -207,6 +207,21 @@ select tests.login('alice');
 select isnt(public.regenerate_invite_code(tests.gid()), tests.get('code'), 'Admin can regenerate the code');
 select is_empty($$ select 1 from public.preview_group(tests.get('code')) $$, 'The old code stops working');
 select lives_ok($$ select public.rename_group(tests.gid(), 'Weekend Crew') $$, 'Admin can rename the group');
+select is((select check_every_min::int * 100 + save_every_min from public.groups where id = tests.gid()), 105,
+  'New groups check every 1 min and save every 5');
+select lives_ok($$ select public.set_group_timing(tests.gid(), 2, 10) $$, 'Admin can change the timing');
+select is((select check_every_min::int * 100 + save_every_min from public.groups where id = tests.gid()), 210,
+  'The new timing is stored');
+select throws_ok($$ select public.set_group_timing(tests.gid(), 0, 5) $$, '23514', null,
+  'Checking less than every minute is refused');
+select throws_ok($$ select public.set_group_timing(tests.gid(), 5, 31) $$, '23514', null,
+  'Saving more than 30 minutes apart is refused');
+select throws_ok($$ select public.set_group_timing(tests.gid(), 10, 5) $$, '23514', null,
+  'Saving more often than checking is refused');
+select tests.login('bob');
+select throws_ok($$ select public.set_group_timing(tests.gid(), 1, 1) $$, 'not_admin',
+  'Only the admin can change the timing');
+select tests.login('alice');
 select throws_ok($$ select public.kick_member(tests.gid(), tests.uid('alice')) $$, 'cannot_kick_self',
   'Admin cannot kick themselves');
 select lives_ok($$ select public.kick_member(tests.gid(), tests.uid('dave')) $$, 'Admin can kick a member');
