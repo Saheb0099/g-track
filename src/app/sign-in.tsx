@@ -11,6 +11,7 @@ import { Glass, GlassTarget } from '@/components/glass';
 import { useRememberInvite } from '@/features/groups/pending-invite';
 import { useMapStyle } from '@/features/map/styles';
 import { signInWithGoogle } from '@/lib/auth';
+import { friendlyError } from '@/lib/errors';
 import { fonts, radius, type as typeStyles, useColors } from '@/lib/theme';
 
 const PRIVACY_URL = 'https://saheb0099.github.io/g-track-site/privacy.html';
@@ -32,7 +33,7 @@ export default function SignIn() {
       // On success the session changes and the route guard moves us to the map.
       await signInWithGoogle();
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(friendlyError(e));
     } finally {
       setBusy(false);
     }

@@ -9,18 +9,26 @@ const MESSAGES: Record<string, string> = {
   groups_name_check: 'Group names need 1 to 40 characters.',
 };
 
+// How a dropped or missing connection shows up: from fetch, Android's networking and Supabase.
+const OFFLINE =
+  /network request failed|failed to fetch|fetch failed|unable to resolve host|unknownhost|network is unreachable|timed? ?out|connection (refused|reset)/i;
+
+/** The raw text of any error: an Error, a Supabase error object, or anything else. */
+export function errorMessage(error: unknown): string {
+  return error instanceof Error
+    ? error.message
+    : typeof error === 'object' && error !== null && 'message' in error
+      ? String(error.message)
+      : String(error);
+}
+
 export function friendlyError(error: unknown): string {
-  const message =
-    error instanceof Error
-      ? error.message
-      : typeof error === 'object' && error !== null && 'message' in error
-        ? String(error.message)
-        : String(error);
+  const message = errorMessage(error);
 
   for (const [key, text] of Object.entries(MESSAGES)) {
     if (message.includes(key)) return text;
   }
-  if (/network request failed|failed to fetch/i.test(message)) {
+  if (OFFLINE.test(message)) {
     return 'No internet connection. Try again when you are online.';
   }
   return message;

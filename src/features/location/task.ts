@@ -7,6 +7,7 @@ import { AppRegistry } from 'react-native';
 import { TICK_TASK } from '../../../modules/gtrack-alarm';
 
 import { logEvent } from '@/features/location/queue';
+import { errorMessage } from '@/lib/errors';
 import {
   checkIn,
   HEARTBEAT_TASK,
@@ -40,9 +41,7 @@ TaskManager.defineTask<{ locations: LocationObject[] }>(LOCATION_TASK, async ({ 
 
 // The exact alarm, every 5 minutes, even when readings have stopped.
 AppRegistry.registerHeadlessTask(TICK_TASK, () => async () => {
-  await checkIn('alarm').catch((e) =>
-    logEvent(`alarm failed: ${e instanceof Error ? e.message : String(e)}`).catch(() => {}),
-  );
+  await checkIn('alarm').catch((e) => logEvent(`alarm failed: ${errorMessage(e)}`).catch(() => {}));
 });
 
 // The WorkManager backstop, about every 15 minutes.
@@ -51,7 +50,7 @@ TaskManager.defineTask(HEARTBEAT_TASK, async () => {
     await checkIn('heartbeat');
     return BackgroundTask.BackgroundTaskResult.Success;
   } catch (e) {
-    await logEvent(`heartbeat failed: ${e instanceof Error ? e.message : String(e)}`).catch(() => {});
+    await logEvent(`heartbeat failed: ${errorMessage(e)}`).catch(() => {});
     return BackgroundTask.BackgroundTaskResult.Failed;
   }
 });

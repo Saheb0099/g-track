@@ -18,6 +18,7 @@ import {
 } from '@/features/location/rules';
 import { reportStatus, type DeviceStatus } from '@/features/location/status';
 import { flushQueue } from '@/features/location/upload';
+import { errorMessage } from '@/lib/errors';
 import { supabase } from '@/lib/supabase';
 
 export const LOCATION_TASK = 'gtrack-location';
@@ -214,7 +215,7 @@ async function freshFix(accuracy: Location.Accuracy, timeoutMs: number, label: s
     if (!fix) await logEvent(`${label} fix timed out`);
     return fix;
   } catch (e) {
-    await logEvent(`${label} fix failed: ${e instanceof Error ? e.message : String(e)}`);
+    await logEvent(`${label} fix failed: ${errorMessage(e)}`);
     return null;
   } finally {
     clearTimeout(timer);
@@ -339,7 +340,7 @@ async function withTimeout(step: Promise<unknown>, ms: number, label: string) {
   try {
     if ((await Promise.race([step, timeout])) === 'timeout') await logEvent(`${label} timed out`);
   } catch (e) {
-    await logEvent(`${label} failed: ${e instanceof Error ? e.message : String(e)}`);
+    await logEvent(`${label} failed: ${errorMessage(e)}`);
   } finally {
     clearTimeout(timer);
   }

@@ -14,13 +14,19 @@ export function recentDays(now = new Date()): Day[] {
     const start = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i);
     const end = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i + 1);
     const label =
-      i === 0 ? 'Today' : i === 1 ? 'Yesterday' : start.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric' });
+      i === 0
+        ? 'Today'
+        : i === 1
+          ? 'Yesterday'
+          : start.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric' });
     return { start, end, label, isToday: i === 0 };
   });
 }
 
-// A day has at most ~300 points at one per 5 minutes plus trips; this leaves headroom.
-const MAX_POINTS_PER_DAY = 2000;
+// The server returns at most 1,000 rows per request, and a group saving every minute makes
+// ~1,440 points a day, so a day is read in pages until one comes back empty.
+const PAGE_SIZE = 1000;
+const MAX_POINTS_PER_DAY = 5000;
 
 export function useDayHistory(userId: string, day: Day) {
   return useQuery({
@@ -28,21 +34,23 @@ export function useDayHistory(userId: string, day: Day) {
     // Past days don't change; today gains a point every 5 minutes.
     staleTime: day.isToday ? 60_000 : Infinity,
     queryFn: async (): Promise<HistoryPoint[]> => {
-      const { data, error } = await supabase
-        .from('locations')
-        .select('lat, lng, accuracy_m, recorded_at')
-        .eq('user_id', userId)
-        .gte('recorded_at', day.start.toISOString())
-        .lt('recorded_at', day.end.toISOString())
-        .order('recorded_at')
-        .limit(MAX_POINTS_PER_DAY);
-      if (error) throw error;
-      return data.map((row) => ({
-        lat: row.lat,
-        lng: row.lng,
-        accuracyM: row.accuracy_m,
-        time: Date.parse(row.recorded_at),
-      }));
+      const points: HistoryPoint[] = [];
+      while (points.length < MAX_POINTS_PER_DAY) {
+        const { data, error } = await supabase
+          .from('locations')
+          .select('lat, lng, accuracy_m, recorded_at')
+          .eq('user_id', userId)
+          .gte('recorded_at', day.start.toISOString())
+          .lt('recorded_at', day.end.toISOString())
+          .order('recorded_at')
+          .range(points.length, points.length + PAGE_SIZE - 1);
+        if (error) throw error;
+        if (data.length === 0) break;
+        for (const row of data) {
+          points.push({ lat: row.lat, lng: row.lng, accuracyM: row.accuracy_m, time: Date.parse(row.recorded_at) });
+        }
+      }
+      return points;
     },
   });
 }
