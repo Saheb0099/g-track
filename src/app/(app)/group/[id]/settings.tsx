@@ -1,7 +1,16 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Fragment, useState } from 'react';
-import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Alert,
+  KeyboardAvoidingView,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Button } from '@/components/button';
@@ -128,138 +137,144 @@ export default function GroupSettings() {
   }
 
   return (
-    <ScrollView
-      style={{ backgroundColor: colors.background }}
-      contentContainerStyle={[styles.container, { paddingTop: safe.top + 12, paddingBottom: safe.bottom + 32 }]}>
-      <View style={styles.header}>
-        <View style={[styles.badge, { backgroundColor: colors.accent }]}>
-          <Text style={[typeStyles.heading, { color: colors.onAccent, fontSize: 18 }]}>
-            {groupName[0].toUpperCase()}
-          </Text>
-        </View>
-        <View style={styles.flex}>
-          <Text style={[typeStyles.title, { color: colors.text, fontSize: 24 }]} numberOfLines={1}>
-            {groupName}
-          </Text>
-          <Text style={[typeStyles.caption, { color: colors.muted }]}>
-            {memberList.length} of {MAX_MEMBERS} members{isAdmin ? " · You're admin" : ''}
-          </Text>
-        </View>
-        <Pressable
-          onPress={close}
-          accessibilityRole="button"
-          accessibilityLabel="Close"
-          hitSlop={8}
-          style={[styles.close, { backgroundColor: colors.fill }]}>
-          <Ionicons name="close" size={18} color={colors.muted} />
-        </Pressable>
-      </View>
-
-      {isAdmin ? (
-        <Card style={styles.invite}>
-          <SectionLabel>Invite friends</SectionLabel>
-          {invite.data ? (
-            <View style={styles.codeRow} accessible accessibilityLabel={`Join code ${invite.data.split('').join(' ')}`}>
-              {invite.data.split('').map((ch, i) => (
-                <View key={i} style={[styles.codeBox, { backgroundColor: colors.background }]}>
-                  <Text style={[styles.codeChar, { color: colors.text }]}>{ch}</Text>
-                </View>
-              ))}
-            </View>
-          ) : (
-            <ActivityIndicator style={styles.codeLoading} />
-          )}
-          <View style={styles.row}>
-            <Button
-              title="Share invite link"
-              style={styles.flex}
-              disabled={!invite.data}
-              onPress={() => invite.data && shareInvite(groupName, invite.data)}
-              icon={<Ionicons name="share-outline" size={18} color={colors.onAccent} />}
-            />
-            <Button title="New code" variant="secondary" loading={regenerate.isPending} onPress={confirmNewCode} />
+    // The page shrinks above the keyboard, so the name field and Save stay in view while typing.
+    <KeyboardAvoidingView behavior="padding" style={[styles.flex, { backgroundColor: colors.background }]}>
+      <ScrollView
+        keyboardShouldPersistTaps="handled"
+        contentContainerStyle={[styles.container, { paddingTop: safe.top + 12, paddingBottom: safe.bottom + 32 }]}>
+        <View style={styles.header}>
+          <View style={[styles.badge, { backgroundColor: colors.accent }]}>
+            <Text style={[typeStyles.heading, { color: colors.onAccent, fontSize: 18 }]}>
+              {groupName[0].toUpperCase()}
+            </Text>
           </View>
-        </Card>
-      ) : (
-        <Card style={styles.invite}>
-          <SectionLabel>Invite friends</SectionLabel>
-          <Text style={[typeStyles.body, { color: colors.muted }]}>
-            Only {admin?.displayName ?? 'the admin'} (the admin) can invite people. Ask them for the join code.
-          </Text>
-        </Card>
-      )}
+          <View style={styles.flex}>
+            <Text style={[typeStyles.title, { color: colors.text, fontSize: 24 }]} numberOfLines={1}>
+              {groupName}
+            </Text>
+            <Text style={[typeStyles.caption, { color: colors.muted }]}>
+              {memberList.length} of {MAX_MEMBERS} members{isAdmin ? " · You're admin" : ''}
+            </Text>
+          </View>
+          <Pressable
+            onPress={close}
+            accessibilityRole="button"
+            accessibilityLabel="Close"
+            hitSlop={8}
+            style={[styles.close, { backgroundColor: colors.fill }]}>
+            <Ionicons name="close" size={18} color={colors.muted} />
+          </Pressable>
+        </View>
 
-      <View style={styles.section}>
-        <SectionLabel>Members</SectionLabel>
-        <Card>
-          {memberList.map((member, i) => (
-            <Fragment key={member.userId}>
-              {i > 0 && <RowDivider />}
-              <MemberRow
-                member={member}
-                now={now}
-                isYou={member.userId === me}
-                staleMs={staleMs}
-                // The Admin badge on the right says it; no need to repeat it in the status line.
-                isAdmin={false}
-                trailing={
-                  member.userId === adminId ? (
-                    <View style={[styles.adminChip, { backgroundColor: colors.accentFill }]}>
-                      <Text
-                        style={[
-                          typeStyles.caption,
-                          { color: colors.accentText, fontFamily: fonts.bold, fontSize: 12 },
-                        ]}>
-                        Admin
-                      </Text>
-                    </View>
-                  ) : isAdmin ? (
-                    <Pressable
-                      onPress={() => memberActions(member)}
-                      hitSlop={10}
-                      accessibilityRole="button"
-                      accessibilityLabel={`Options for ${member.displayName}`}
-                      style={styles.more}>
-                      <Ionicons name="ellipsis-horizontal" size={22} color={colors.muted} />
-                    </Pressable>
-                  ) : (
-                    <View />
-                  )
-                }
+        {isAdmin ? (
+          <Card style={styles.invite}>
+            <SectionLabel>Invite friends</SectionLabel>
+            {invite.data ? (
+              <View
+                style={styles.codeRow}
+                accessible
+                accessibilityLabel={`Join code ${invite.data.split('').join(' ')}`}>
+                {invite.data.split('').map((ch, i) => (
+                  <View key={i} style={[styles.codeBox, { backgroundColor: colors.background }]}>
+                    <Text style={[styles.codeChar, { color: colors.text }]}>{ch}</Text>
+                  </View>
+                ))}
+              </View>
+            ) : (
+              <ActivityIndicator style={styles.codeLoading} />
+            )}
+            <View style={styles.row}>
+              <Button
+                title="Share invite link"
+                style={styles.flex}
+                disabled={!invite.data}
+                onPress={() => invite.data && shareInvite(groupName, invite.data)}
+                icon={<Ionicons name="share-outline" size={18} color={colors.onAccent} />}
               />
-            </Fragment>
-          ))}
-        </Card>
-      </View>
+              <Button title="New code" variant="secondary" loading={regenerate.isPending} onPress={confirmNewCode} />
+            </View>
+          </Card>
+        ) : (
+          <Card style={styles.invite}>
+            <SectionLabel>Invite friends</SectionLabel>
+            <Text style={[typeStyles.body, { color: colors.muted }]}>
+              Only {admin?.displayName ?? 'the admin'} (the admin) can invite people. Ask them for the join code.
+            </Text>
+          </Card>
+        )}
 
-      <View style={styles.section}>
-        <SectionLabel>Location timing</SectionLabel>
-        {/* Keyed by the saved timing so the controls reset after saving. */}
-        <TimingForm
-          key={`${group.data.checkEveryMin}-${group.data.saveEveryMin}`}
-          checkEveryMin={group.data.checkEveryMin}
-          saveEveryMin={group.data.saveEveryMin}
-          editable={isAdmin}
-          saving={timing.isPending}
-          onSave={(next) => timing.mutate(next, { onError: showError })}
-        />
-      </View>
-
-      {isAdmin && (
         <View style={styles.section}>
-          <SectionLabel>Name</SectionLabel>
-          {/* Keyed by the saved name so the field resets after a rename. */}
-          <RenameForm
-            key={groupName}
-            current={groupName}
-            saving={rename.isPending}
-            onSave={(next) => rename.mutate(next, { onError: showError })}
+          <SectionLabel>Members</SectionLabel>
+          <Card>
+            {memberList.map((member, i) => (
+              <Fragment key={member.userId}>
+                {i > 0 && <RowDivider />}
+                <MemberRow
+                  member={member}
+                  now={now}
+                  isYou={member.userId === me}
+                  staleMs={staleMs}
+                  // The Admin badge on the right says it; no need to repeat it in the status line.
+                  isAdmin={false}
+                  trailing={
+                    member.userId === adminId ? (
+                      <View style={[styles.adminChip, { backgroundColor: colors.accentFill }]}>
+                        <Text
+                          style={[
+                            typeStyles.caption,
+                            { color: colors.accentText, fontFamily: fonts.bold, fontSize: 12 },
+                          ]}>
+                          Admin
+                        </Text>
+                      </View>
+                    ) : isAdmin ? (
+                      <Pressable
+                        onPress={() => memberActions(member)}
+                        hitSlop={10}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Options for ${member.displayName}`}
+                        style={styles.more}>
+                        <Ionicons name="ellipsis-horizontal" size={22} color={colors.muted} />
+                      </Pressable>
+                    ) : (
+                      <View />
+                    )
+                  }
+                />
+              </Fragment>
+            ))}
+          </Card>
+        </View>
+
+        <View style={styles.section}>
+          <SectionLabel>Location timing</SectionLabel>
+          {/* Keyed by the saved timing so the controls reset after saving. */}
+          <TimingForm
+            key={`${group.data.checkEveryMin}-${group.data.saveEveryMin}`}
+            checkEveryMin={group.data.checkEveryMin}
+            saveEveryMin={group.data.saveEveryMin}
+            editable={isAdmin}
+            saving={timing.isPending}
+            onSave={(next) => timing.mutate(next, { onError: showError })}
           />
         </View>
-      )}
 
-      <Button title="Leave group" variant="danger" loading={leave.isPending} onPress={confirmLeave} />
-    </ScrollView>
+        {isAdmin && (
+          <View style={styles.section}>
+            <SectionLabel>Name</SectionLabel>
+            {/* Keyed by the saved name so the field resets after a rename. */}
+            <RenameForm
+              key={groupName}
+              current={groupName}
+              saving={rename.isPending}
+              onSave={(next) => rename.mutate(next, { onError: showError })}
+            />
+          </View>
+        )}
+
+        <Button title="Leave group" variant="danger" loading={leave.isPending} onPress={confirmLeave} />
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 
