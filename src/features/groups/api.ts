@@ -13,6 +13,8 @@ export type GroupSummary = {
   /** The admin's timing for members' phones, in minutes. */
   checkEveryMin: number;
   saveEveryMin: number;
+  /** Set while the group waits out the 7 days before it's removed (see deletionDate). */
+  deletedAt: string | null;
 };
 
 export type Member = {
@@ -76,7 +78,7 @@ export function useMyGroups() {
     queryFn: async (): Promise<GroupSummary[]> => {
       const { data, error } = await supabase
         .from('groups')
-        .select('id, name, admin_id, check_every_min, save_every_min, group_members(count)')
+        .select('id, name, admin_id, check_every_min, save_every_min, deleted_at, group_members(count)')
         .order('created_at');
       if (error) throw error;
       return data.map((g) => ({
@@ -86,6 +88,7 @@ export function useMyGroups() {
         memberCount: g.group_members[0]?.count ?? 0,
         checkEveryMin: g.check_every_min,
         saveEveryMin: g.save_every_min,
+        deletedAt: g.deleted_at,
       }));
     },
   });
@@ -98,7 +101,7 @@ export function useGroup(id: string) {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('groups')
-        .select('id, name, admin_id, check_every_min, save_every_min')
+        .select('id, name, admin_id, check_every_min, save_every_min, deleted_at')
         .eq('id', id)
         .maybeSingle();
       if (error) throw error;
@@ -109,6 +112,7 @@ export function useGroup(id: string) {
           adminId: data.admin_id,
           checkEveryMin: data.check_every_min,
           saveEveryMin: data.save_every_min,
+          deletedAt: data.deleted_at,
         }
       );
     },
@@ -220,6 +224,45 @@ export function useRenameGroup(groupId: string) {
   return useMutation({
     mutationFn: async (name: string) => {
       const { error } = await supabase.rpc('rename_group', { p_group_id: groupId, p_name: name });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: keys.group(groupId) });
+      queryClient.invalidateQueries({ queryKey: keys.groups });
+    },
+  });
+}
+
+/** When a group marked for deletion is removed for good: 7 days after the admin deleted it. */
+export function deletionDate(deletedAt: string) {
+  return new Date(Date.parse(deletedAt) + 7 * 24 * 60 * 60_000);
+}
+
+/** "12 Nov", for "will be deleted on …". */
+export function formatDeletionDate(deletedAt: string) {
+  return deletionDate(deletedAt).toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
+}
+
+/** Admin only. Schedules the group's deletion in 7 days; useRestoreGroup cancels it. */
+export function useDeleteGroup(groupId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async () => {
+      const { error } = await supabase.rpc('delete_group', { p_group_id: groupId });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: keys.group(groupId) });
+      queryClient.invalidateQueries({ queryKey: keys.groups });
+    },
+  });
+}
+
+export function useRestoreGroup(groupId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async () => {
+      const { error } = await supabase.rpc('restore_group', { p_group_id: groupId });
       if (error) throw error;
     },
     onSuccess: () => {

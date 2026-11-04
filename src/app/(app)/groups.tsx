@@ -6,7 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Button } from '@/components/button';
 import { Card, RowDivider, SectionLabel } from '@/components/card';
-import { MAX_MEMBERS, useMyGroups } from '@/features/groups/api';
+import { formatDeletionDate, MAX_MEMBERS, useMyGroups } from '@/features/groups/api';
 import { setCurrentGroup, useCurrentGroup } from '@/features/groups/current-group';
 import { useAuth } from '@/lib/auth';
 import { friendlyError } from '@/lib/errors';
@@ -73,6 +73,7 @@ export default function Groups() {
                       <Text style={[typeStyles.caption, { color: colors.muted }]}>
                         {g.memberCount} of {MAX_MEMBERS} members
                         {g.adminId === session?.user.id ? ' · You are admin' : ''}
+                        {g.deletedAt ? ` · Deleted on ${formatDeletionDate(g.deletedAt)}` : ''}
                       </Text>
                     </View>
                     {active && <Ionicons name="checkmark-circle" size={24} color={colors.accent} />}

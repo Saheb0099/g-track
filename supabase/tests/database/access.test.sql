@@ -295,6 +295,53 @@ select is_empty($$ select 1 from public.group_members where user_id = tests.uid(
   'On day 8 they leave every group');
 
 -- ---------------------------------------------------------------------------
+-- Deleting a group
+-- ---------------------------------------------------------------------------
+
+select tests.login('dave');
+insert into tests.ctx (k, v) select 'temp', g.group_id::text from public.create_group('Temp') g;
+insert into tests.ctx (k, v) select 'temp_code', i.code from public.group_invites i where i.group_id = tests.get('temp')::uuid;
+select tests.login('carol');
+select lives_ok($$ select public.join_group(tests.get('temp_code')) $$, 'Carol joins the group');
+select throws_ok($$ select public.delete_group(tests.get('temp')::uuid) $$, 'not_admin',
+  'Only the admin can delete a group');
+
+select tests.login('dave');
+select lives_ok($$ select public.delete_group(tests.get('temp')::uuid) $$, 'The admin can delete the group');
+select tests.login('carol');
+select isnt_empty($$ select 1 from public.groups where id = tests.get('temp')::uuid and deleted_at is not null $$,
+  'The group stays, marked for deletion');
+select isnt_empty($$ select 1 from public.group_members where group_id = tests.get('temp')::uuid and user_id = tests.uid('carol') $$,
+  'Members stay during the 7 days');
+select throws_ok($$ select public.restore_group(tests.get('temp')::uuid) $$, 'not_admin',
+  'Only the admin can cancel the deletion');
+reset role;
+delete from public.group_members where group_id = tests.get('temp')::uuid and user_id = tests.uid('carol');
+select tests.login('carol');
+select throws_ok($$ select public.join_group(tests.get('temp_code')) $$, 'group_closing',
+  'Nobody can join a group being deleted');
+
+select tests.login('dave');
+select is(public.restore_group(tests.get('temp')::uuid), true, 'The admin can cancel the deletion');
+select is((select deleted_at from public.groups where id = tests.get('temp')::uuid), null,
+  'A cancelled deletion leaves the group as it was');
+select is(public.restore_group(tests.get('temp')::uuid), false, 'Nothing to cancel the second time');
+select lives_ok($$ select public.delete_group(tests.get('temp')::uuid) $$, 'The admin can delete it again');
+reset role;
+
+update public.groups set deleted_at = now() - interval '6 days' where id = tests.get('temp')::uuid;
+do $$ begin execute (select command from cron.job where jobname = 'purge-deleted-groups'); end $$;
+select isnt_empty($$ select 1 from public.groups where id = tests.get('temp')::uuid $$,
+  'A group is kept until the 7 days are up');
+update public.groups set deleted_at = now() - interval '7 days 1 minute' where id = tests.get('temp')::uuid;
+do $$ begin execute (select command from cron.job where jobname = 'purge-deleted-groups'); end $$;
+select is_empty($$ select 1 from public.groups where id = tests.get('temp')::uuid $$, 'On day 8 the group is gone');
+select is_empty($$ select 1 from public.group_members where group_id = tests.get('temp')::uuid $$,
+  'On day 8 its memberships are gone');
+select is_empty($$ select 1 from public.group_invites where group_id = tests.get('temp')::uuid $$,
+  'On day 8 its invite code is gone');
+
+-- ---------------------------------------------------------------------------
 -- Retention job and anonymous access
 -- ---------------------------------------------------------------------------
 

@@ -78,6 +78,7 @@ export type Database = {
           admin_id: string
           check_every_min: number
           created_at: string
+          deleted_at: string | null
           id: string
           name: string
           save_every_min: number
@@ -86,6 +87,7 @@ export type Database = {
           admin_id: string
           check_every_min?: number
           created_at?: string
+          deleted_at?: string | null
           id?: string
           name: string
           save_every_min?: number
@@ -94,6 +96,7 @@ export type Database = {
           admin_id?: string
           check_every_min?: number
           created_at?: string
+          deleted_at?: string | null
           id?: string
           name?: string
           save_every_min?: number
@@ -247,6 +250,7 @@ export type Database = {
           invite_code: string
         }[]
       }
+      delete_group: { Args: { p_group_id: string }; Returns: undefined }
       delete_my_account: { Args: never; Returns: undefined }
       join_group: { Args: { p_code: string }; Returns: string }
       kick_member: {
@@ -268,6 +272,7 @@ export type Database = {
         Args: { p_group_id: string; p_name: string }
         Returns: undefined
       }
+      restore_group: { Args: { p_group_id: string }; Returns: boolean }
       restore_my_account: { Args: never; Returns: boolean }
       set_group_timing: {
         Args: {

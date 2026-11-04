@@ -7,6 +7,7 @@ const MESSAGES: Record<string, string> = {
   cannot_kick_self: "You can't remove yourself. Use Leave group instead.",
   not_authenticated: 'Please sign in again.',
   groups_name_check: 'Group names need 1 to 40 characters.',
+  group_closing: "This group is being deleted, so it can't take new members.",
 };
 
 // How a dropped or missing connection shows up: from fetch, Android's networking and Supabase.

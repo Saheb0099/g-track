@@ -5,7 +5,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { Button } from '@/components/button';
 import { Card, RowDivider } from '@/components/card';
-import type { GroupSummary, Member } from '@/features/groups/api';
+import { formatDeletionDate, type GroupSummary, type Member } from '@/features/groups/api';
 import { MemberRow } from '@/features/groups/member-row';
 import { useSharingStatus } from '@/features/location/sharing-status';
 import type { LivePosition } from '@/features/map/api';
@@ -48,6 +48,11 @@ export function PeoplePanel({ group, members, positions, now, meId, onSelect }: 
               {status.tone !== 'ok' && <Ionicons name="chevron-forward" size={14} color={colors.muted} />}
             </Pressable>
           )}
+          {group.deletedAt && (
+            <Text style={[typeStyles.caption, { color: colors.danger }]}>
+              Group will be deleted on {formatDeletionDate(group.deletedAt)}
+            </Text>
+          )}
         </View>
         {/* Invites, members, location timing and leaving all live in the group's settings. */}
         <Button
@@ -77,7 +82,7 @@ export function PeoplePanel({ group, members, positions, now, meId, onSelect }: 
 
       {members.length === 1 && isAdmin && (
         <Text style={[typeStyles.caption, styles.hint, { color: colors.muted }]}>
-          {"It's just you so far. Tap Invite to share the group's link with friends."}
+          {"It's just you so far. Open Group settings to share the group's invite link."}
         </Text>
       )}
     </View>

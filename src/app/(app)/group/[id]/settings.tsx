@@ -24,7 +24,10 @@ import {
   useLeaveGroup,
   useMembers,
   useRegenerateCode,
+  formatDeletionDate,
+  useDeleteGroup,
   useRenameGroup,
+  useRestoreGroup,
   useSetGroupTiming,
   useTransferAdmin,
   type Member,
@@ -59,6 +62,8 @@ export default function GroupSettings() {
   const transfer = useTransferAdmin(id);
   const leave = useLeaveGroup(id);
   const timing = useSetGroupTiming(id);
+  const deleteGroup = useDeleteGroup(id);
+  const restoreGroup = useRestoreGroup(id);
   const [now] = useState(() => Date.now());
 
   const close = () => router.back();
@@ -83,6 +88,7 @@ export default function GroupSettings() {
 
   const groupName = group.data.name;
   const adminId = group.data.adminId;
+  const deletingOn = group.data.deletedAt ? formatDeletionDate(group.data.deletedAt) : null;
   const staleMs = staleAfterMs(group.data.saveEveryMin);
   const memberList = members.data ?? [];
   const admin = memberList.find((m) => m.userId === adminId);
@@ -120,6 +126,17 @@ export default function GroupSettings() {
           ]),
       },
     ]);
+  }
+
+  function confirmDelete() {
+    Alert.alert(
+      `Delete ${groupName}?`,
+      "It's deleted in 7 days. Until then it works as usual, nobody new can join, and you can cancel. Everyone keeps their own location history.",
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Delete', style: 'destructive', onPress: () => deleteGroup.mutate(undefined, { onError: showError }) },
+      ],
+    );
   }
 
   function confirmLeave() {
@@ -169,7 +186,28 @@ export default function GroupSettings() {
           </Pressable>
         </View>
 
-        {isAdmin ? (
+        {deletingOn && (
+          <Card style={[styles.invite, { backgroundColor: colors.dangerFill }]}>
+            <Text style={[typeStyles.bodyStrong, { color: colors.danger }]}>
+              This group will be deleted on {deletingOn}
+            </Text>
+            <Text style={[typeStyles.body, { color: colors.text }]}>
+              {isAdmin
+                ? 'Nobody new can join until then. Changed your mind? Cancel it and the group carries on as before.'
+                : `Nobody new can join. Only ${admin?.displayName ?? 'the admin'} (the admin) can cancel it.`}
+            </Text>
+            {isAdmin && (
+              <Button
+                title="Cancel deletion"
+                variant="secondary"
+                loading={restoreGroup.isPending}
+                onPress={() => restoreGroup.mutate(undefined, { onError: showError })}
+              />
+            )}
+          </Card>
+        )}
+
+        {deletingOn ? null : isAdmin ? (
           <Card style={styles.invite}>
             <SectionLabel>Invite friends</SectionLabel>
             {invite.data ? (
@@ -276,7 +314,23 @@ export default function GroupSettings() {
           </View>
         )}
 
-        <Button title="Leave group" variant="danger" loading={leave.isPending} onPress={confirmLeave} />
+        <View style={styles.account}>
+          <Button title="Leave group" variant="danger" loading={leave.isPending} onPress={confirmLeave} />
+          {isAdmin && !deletingOn && (
+            <Pressable
+              onPress={confirmDelete}
+              disabled={deleteGroup.isPending}
+              accessibilityRole="button"
+              hitSlop={8}
+              style={({ pressed }) => [styles.deleteLink, { opacity: pressed ? 0.6 : 1 }]}>
+              {deleteGroup.isPending ? (
+                <ActivityIndicator color={colors.danger} />
+              ) : (
+                <Text style={[typeStyles.bodyStrong, { color: colors.danger }]}>Delete group</Text>
+              )}
+            </Pressable>
+          )}
+        </View>
       </ScrollView>
     </KeyboardAvoidingView>
   );
@@ -396,6 +450,8 @@ function RenameForm({ current, saving, onSave }: { current: string; saving: bool
 }
 
 const styles = StyleSheet.create({
+  account: { gap: 8 },
+  deleteLink: { height: 44, alignItems: 'center', justifyContent: 'center' },
   container: { paddingHorizontal: 16, gap: 22 },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 16, padding: 24 },
   header: { flexDirection: 'row', alignItems: 'center', gap: 12 },
