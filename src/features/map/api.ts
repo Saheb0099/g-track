@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect } from 'react';
+import { useEffect, useId } from 'react';
 
 import type { Database } from '@/lib/database.types';
 import { supabase } from '@/lib/supabase';
@@ -37,6 +37,9 @@ const liveKey = (groupId: string) => ['group', groupId, 'live'] as const;
  */
 export function useLivePositions(groupId: string, memberIds: string[]) {
   const queryClient = useQueryClient();
+  // The client hands back an existing channel of the same name, so two screens showing one
+  // group (the map, and group settings over it) would share, and closing one would cut both off.
+  const instance = useId();
   // Sorted, so the subscription below doesn't restart when the member order changes.
   const ids = [...memberIds].sort();
   const idList = ids.join(',');
@@ -63,7 +66,7 @@ export function useLivePositions(groupId: string, memberIds: string[]) {
     };
 
     const channel = supabase
-      .channel(`live:${groupId}`)
+      .channel(`live:${groupId}:${instance}`)
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'latest_locations', filter: `user_id=in.(${idList})` },
@@ -97,7 +100,7 @@ export function useLivePositions(groupId: string, memberIds: string[]) {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [groupId, idList, queryClient]);
+  }, [groupId, idList, instance, queryClient]);
 
   return query;
 }

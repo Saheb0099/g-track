@@ -22,7 +22,7 @@ import { Glass, GlassTarget } from '@/components/glass';
 import { GlassButton } from '@/components/glass-button';
 import { SheetArea, SheetBackground } from '@/components/sheet-background';
 import { useMembers } from '@/features/groups/api';
-import { recentDays, useDayHistory } from '@/features/history/api';
+import { useDayHistory, useRecentDays } from '@/features/history/api';
 import { HistoryMap, type HistoryMapHandle } from '@/features/history/history-map';
 import { buildTimeline, travelledM, type Stay, type TimelineItem } from '@/features/history/timeline';
 import { useMapIsDark } from '@/features/map/styles';
@@ -52,7 +52,7 @@ export default function MemberHistory() {
   const members = useMembers(id);
   const member = members.data?.find((m) => m.userId === userId);
 
-  const days = useMemo(() => recentDays(), []);
+  const days = useRecentDays();
   const [dayIndex, setDayIndex] = useState(0);
   const history = useDayHistory(userId, days[dayIndex]);
 

@@ -31,6 +31,7 @@ import {
 } from '@/features/groups/api';
 import { shareInvite } from '@/features/groups/invite';
 import { MemberRow } from '@/features/groups/member-row';
+import { useLivePositions } from '@/features/map/api';
 import { staleAfterMs } from '@/features/map/group-map';
 import { useAuth } from '@/lib/auth';
 import { friendlyError } from '@/lib/errors';
@@ -47,6 +48,8 @@ export default function GroupSettings() {
 
   const group = useGroup(id);
   const members = useMembers(id);
+  // The same live positions as the map, so each status line matches the People list.
+  const live = useLivePositions(id, members.data?.map((m) => m.userId) ?? []);
   const isAdmin = !!group.data && group.data.adminId === me;
   const invite = useInviteCode(id, isAdmin);
 
@@ -211,6 +214,7 @@ export default function GroupSettings() {
                 {i > 0 && <RowDivider />}
                 <MemberRow
                   member={member}
+                  position={live.data?.find((p) => p.userId === member.userId)}
                   now={now}
                   isYou={member.userId === me}
                   staleMs={staleMs}

@@ -8,7 +8,7 @@ import { Button } from '@/components/button';
 import { StatTile } from '@/components/card';
 import type { Member } from '@/features/groups/api';
 import { statusLine } from '@/features/groups/member-row';
-import { recentDays, useDayHistory } from '@/features/history/api';
+import { useDayHistory, useRecentDays } from '@/features/history/api';
 import { buildTimeline } from '@/features/history/timeline';
 import type { LivePosition } from '@/features/map/api';
 import { type as typeStyles, useColors } from '@/lib/theme';
@@ -41,7 +41,7 @@ export function PersonPanel({
   onClose,
 }: Props) {
   const colors = useColors();
-  const today = useMemo(() => recentDays()[0], []);
+  const today = useRecentDays()[0];
   const history = useDayHistory(member.userId, today);
 
   // "Here since 9:10 AM" when today's last stay is still going on.

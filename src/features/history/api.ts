@@ -1,4 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
+import { useEffect, useMemo, useState } from 'react';
+import { AppState } from 'react-native';
 
 import type { HistoryPoint } from '@/features/history/timeline';
 import { supabase } from '@/lib/supabase';
@@ -21,6 +23,23 @@ export function recentDays(now = new Date()): Day[] {
           : start.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric' });
     return { start, end, label, isToday: i === 0 };
   });
+}
+
+/** recentDays for a screen: moves on at midnight, and when the app comes back after one. */
+export function useRecentDays(): Day[] {
+  const [date, setDate] = useState(() => new Date().toDateString());
+  useEffect(() => {
+    const update = () => setDate(new Date().toDateString());
+    const now = new Date();
+    const untilMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1).getTime() - now.getTime();
+    const timer = setTimeout(update, untilMidnight + 1000);
+    const sub = AppState.addEventListener('change', (state) => state === 'active' && update());
+    return () => {
+      clearTimeout(timer);
+      sub.remove();
+    };
+  }, [date]);
+  return useMemo(() => recentDays(new Date(date)), [date]);
 }
 
 // The server returns at most 1,000 rows per request, and a group saving every minute makes
