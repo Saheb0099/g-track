@@ -1,9 +1,12 @@
 import { Stack } from 'expo-router';
 
+import { useMarkLinkHandled } from '@/features/groups/pending-invite';
+
 // Opening an invite link from outside the app still puts "My groups" underneath, so Back works.
 export const unstable_settings = { anchor: 'index' };
 
 export default function AppLayout() {
+  useMarkLinkHandled();
   return (
     <Stack>
       <Stack.Screen name="index" options={{ title: 'My groups' }} />

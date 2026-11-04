@@ -2,11 +2,13 @@ import { useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { useRememberInvite } from '@/features/groups/pending-invite';
 import { signInWithGoogle } from '@/lib/auth';
 import { useColors } from '@/lib/theme';
 
 export default function SignIn() {
   const colors = useColors();
+  useRememberInvite();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 

@@ -1,10 +1,12 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router, Stack } from 'expo-router';
+import { useEffect } from 'react';
 import { ActivityIndicator, FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Button } from '@/components/button';
 import { MAX_MEMBERS, useMyGroups, type GroupSummary } from '@/features/groups/api';
+import { takePendingInvite } from '@/features/groups/pending-invite';
 import { useAuth } from '@/lib/auth';
 import { friendlyError } from '@/lib/errors';
 import { usePullToRefresh, useRefreshOnFocus } from '@/lib/query';
@@ -17,6 +19,12 @@ export default function MyGroups() {
   const groups = useMyGroups();
   useRefreshOnFocus(groups.refetch);
   const pull = usePullToRefresh(groups.refetch);
+
+  // Finish an invite link that was opened before signing in.
+  useEffect(() => {
+    const code = takePendingInvite();
+    if (code) router.push({ pathname: '/join/[code]', params: { code } });
+  }, []);
 
   function renderGroup({ item }: { item: GroupSummary }) {
     const isAdmin = item.adminId === session?.user.id;
