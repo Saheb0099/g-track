@@ -99,14 +99,14 @@ All of this is in the Google Cloud console: <https://console.cloud.google.com>.
 
 **b. Find your app's SHA-1 fingerprint**
 
-Google checks that sign-ins come from your build. Debug builds are signed with a key Android
-Studio created for you; print its fingerprint:
+Google checks that sign-ins come from your build. Debug builds are signed with a debug key
+that Expo puts in the generated `android` folder. Create that folder, then print the key's
+fingerprint:
 
 ```bash
-keytool -list -v -keystore ~/.android/debug.keystore -alias androiddebugkey -storepass android | grep SHA1
+npx expo prebuild --platform android
+keytool -list -v -keystore android/app/debug.keystore -alias androiddebugkey -storepass android | grep SHA1
 ```
-
-If that file doesn't exist yet, do step 6 first (the first build creates it), then come back.
 
 **c. Android client**
 
