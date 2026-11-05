@@ -8,40 +8,40 @@ A free location-sharing app for a circle of friends. Android first.
 
 ### Phases 1–8: the core app
 
-- [x] **Phase 1:** database, access rules and tests
-- [x] **Phase 2:** Google sign-in
-- [x] **Phase 3:** groups of up to 10, invite links and codes, admin-only invite, remove and delete
-- [x] **Phase 4:** background location every 5 minutes, even after a restart
-- [x] **Phase 5:** live map with friends' positions
-- [x] **Phase 6:** 7-day history with places, trips and distance
-- [x] **Phase 7:** pause switch, account deletion after a 7-day wait (signing in again cancels it)
-- [x] **Phase 8:** signed APK, install guide and privacy page on the website
+- [X] **Phase 1:** database, access rules and tests
+- [X] **Phase 2:** Google sign-in
+- [X] **Phase 3:** groups of up to 10, invite links and codes, admin-only invite, remove and delete
+- [X] **Phase 4:** background location every 5 minutes, even after a restart
+- [X] **Phase 5:** live map with friends' positions
+- [X] **Phase 6:** 7-day history with places, trips and distance
+- [X] **Phase 7:** pause switch, account deletion after a 7-day wait (signing in again cancels it)
+- [X] **Phase 8:** signed APK, install guide and privacy page on the website
 
 ### Features added since
 
-- [x] Light, dark and automatic theme; map styles
-- [x] Admin sets how often location is checked and saved (1–30 min)
-- [x] Plain sharing notification, can be hidden in Settings
-- [x] Train and bus trips kept even when fixes are rough
-- [x] Admin can delete a group after a 7-day wait (and cancel it)
-- [x] Update notice, directions, "N km away", name editing, offline notice
-- [x] Phone-maker battery steps (Vivo, Xiaomi, Oppo, Samsung, Huawei) with direct buttons
-- [x] Shared pins when friends are at the same spot
-- [x] Navigation bar buttons follow dark mode
-- [x] Pause for 1 hour, 8 hours or until turned back on
-- [x] Stop sharing with one group only
-- [x] Today's distance on each person's card
+- [X] Light, dark and automatic theme; map styles
+- [X] Admin sets how often location is checked and saved (1–30 min)
+- [X] Plain sharing notification, can be hidden in Settings
+- [X] Train and bus trips kept even when fixes are rough
+- [X] Admin can delete a group after a 7-day wait (and cancel it)
+- [X] Update notice, directions, "N km away", name editing, offline notice
+- [X] Phone-maker battery steps (Vivo, Xiaomi, Oppo, Samsung, Huawei) with direct buttons
+- [X] Shared pins when friends are at the same spot
+- [X] Navigation bar buttons follow dark mode
+- [X] Pause for 1 hour, 8 hours or until turned back on
+- [X] Stop sharing with one group only
+- [X] Today's distance on each person's card
 
 ### Security
 
-- [x] Wrong join codes limited to 10 an hour per account
-- [x] Android backup turned off, so the sign-in isn't copied to Google backups
+- [X] Wrong join codes limited to 10 an hour per account
+- [X] Android backup turned off, so the sign-in isn't copied to Google backups
 
 ### Releases
 
-- [x] 1.0.0
-- [x] 1.0.1
-- [x] 1.0.2
+- [X] 1.0.0
+- [X] 1.0.1
+- [X] 1.0.2
 
 ## Next
 
