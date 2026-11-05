@@ -2,7 +2,7 @@
   "expo": {
     "name": "G Track",
     "slug": "g-track",
-    "version": "1.0.2",
+    "version": "1.0.3",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "gtrack",
@@ -24,7 +24,7 @@
         "android.permission.POST_NOTIFICATIONS",
         "android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS"
       ],
-      "versionCode": 3
+      "versionCode": 4
     },
     "web": {
       "output": "single",
