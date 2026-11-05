@@ -159,7 +159,7 @@ select is_empty($$ select 1 from public.latest_locations where user_id = tests.u
   'Strangers cannot see live positions');
 select is_empty($$ select 1 from public.group_members where group_id = tests.gid() $$,
   'Strangers cannot see members');
-select throws_ok($$ select public.join_group('ZZZZZZ') $$, 'invalid_code', 'A wrong code is refused');
+select is(public.join_group('ZZZZZZ'), null, 'A wrong code joins nothing');
 
 -- ---------------------------------------------------------------------------
 -- Pausing sharing hides only the live position
@@ -405,6 +405,45 @@ select is((select count(*) from public.locations where user_id = tests.uid('alic
   'Cleanup keeps newer points');
 select is_empty($$ select 1 from public.latest_locations where recorded_at < now() - interval '7 days' $$,
   'Cleanup deletes a live position older than 7 days');
+
+-- ---------------------------------------------------------------------------
+-- Wrong join codes: 10 an hour per account
+-- ---------------------------------------------------------------------------
+
+reset role;
+select tests.login('dave');
+select lives_ok($$ select public.create_group('Dave''s group') $$, 'Dave makes a group');
+reset role;
+insert into tests.ctx values ('dave_code', (
+  select i.code from public.group_invites i join public.groups g on g.id = i.group_id
+  where g.admin_id = tests.uid('dave') and g.name = 'Dave''s group'));
+-- Carol has used 1 wrong code above (ZZZZZZ); 8 more different ones, plus repeats that don't count.
+do $$
+begin
+  perform tests.login('carol');
+  for i in 1..8 loop
+    perform public.preview_group('ZZZZZ' || chr(64 + i));
+  end loop;
+  perform public.preview_group('ZZZZZA');
+  perform public.join_group('ZZZZZA');
+end $$;
+select is((select count(*) from public.preview_group(tests.get('dave_code'))), 1::bigint,
+  'After 9 wrong codes (repeats count once), a right code still works');
+select is(public.join_group('YYYYYY'), null, 'The 10th wrong code is noted');
+select throws_ok($$ select public.join_group(tests.get('dave_code')) $$, 'too_many_tries',
+  'After 10 wrong codes, even a right code is refused');
+select throws_ok($$ select * from public.preview_group(tests.get('dave_code')) $$, 'too_many_tries',
+  'Looking up codes is refused too');
+select tests.login('bob');
+select is((select count(*) from public.preview_group(tests.get('dave_code'))), 1::bigint,
+  'Other accounts are not affected');
+reset role;
+update private.join_code_misses set missed_at = now() - interval '61 minutes' where user_id = tests.uid('carol');
+select tests.login('carol');
+select is((select count(*) from public.preview_group(tests.get('dave_code'))), 1::bigint,
+  'An hour later, codes work again');
+select throws_ok($$ select 1 from private.join_code_misses $$, '42501', null, 'Users cannot read the wrong-code list');
+reset role;
 
 set local role anon;
 select throws_ok($$ select public.create_group('Anon') $$, '42501', null, 'Signed-out users cannot call functions');

@@ -4,7 +4,7 @@ import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 
 import { Button } from '@/components/button';
 import { isValidCode, MAX_MEMBERS, normalizeCode, useJoinGroup, usePreviewGroup } from '@/features/groups/api';
-import { friendlyError } from '@/lib/errors';
+import { errorMessage, friendlyError } from '@/lib/errors';
 import { type, useColors } from '@/lib/theme';
 
 // Reached by typing a code, or by opening an invite link: gtrack://join/CODE
@@ -38,6 +38,9 @@ export default function JoinGroup() {
     );
   }
   if (preview.isError) {
+    if (errorMessage(preview.error).includes('too_many_tries')) {
+      return message('Too many wrong codes', 'To keep groups safe, codes are paused for an hour. Try again later.');
+    }
     return message(
       "Couldn't check this code",
       friendlyError(preview.error),

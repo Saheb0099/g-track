@@ -9,6 +9,7 @@ const MESSAGES: Record<string, string> = {
   groups_name_check: 'Group names need 1 to 40 characters.',
   member_leaving: "That person's account is being deleted, so they can't be admin.",
   group_closing: "This group is being deleted, so it can't take new members.",
+  too_many_tries: 'Too many wrong codes. Try again in an hour.',
 };
 
 // How a dropped or missing connection shows up: from fetch, Android's networking and Supabase.

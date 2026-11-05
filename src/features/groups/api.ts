@@ -214,6 +214,8 @@ export function useJoinGroup() {
     mutationFn: async (code: string) => {
       const { data, error } = await supabase.rpc('join_group', { p_code: code });
       if (error) throw error;
+      // A wrong code comes back empty (the database counts it towards the hourly limit).
+      if (!data) throw new Error('invalid_code');
       return data;
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: keys.groups }),
