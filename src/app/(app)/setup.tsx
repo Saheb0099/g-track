@@ -8,19 +8,24 @@ import { Alert, Linking, PermissionsAndroid, ScrollView, StyleSheet, Text, View 
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Button } from '@/components/button';
-import { brandTip } from '@/features/location/brand-tips';
+import { openStepPage, phoneSteps, type PhoneStep } from '@/features/location/phone-steps';
 import { useSetupChecks, useTracking } from '@/features/location/use-tracking';
 import { radius, type as typeStyles, useColors } from '@/lib/theme';
 
 const PACKAGE = Constants.expoConfig?.android?.package ?? 'com.sahebbeshra.gtrack';
-const BRAND_DONE_KEY = 'gtrack.setup.brand-done';
+// Phone-maker steps the app can't check are ticked by hand, and remembered on this phone.
+const doneKey = (id: string) => `gtrack.setup.done.${id}`;
 
-function readBrandDone() {
-  try {
-    return localStorage.getItem(BRAND_DONE_KEY) === 'yes';
-  } catch {
-    return false;
+function readManualDone(steps: PhoneStep[]): Record<string, boolean> {
+  const done: Record<string, boolean> = {};
+  for (const step of steps) {
+    try {
+      done[step.id] = localStorage.getItem(doneKey(step.id)) === 'yes';
+    } catch {
+      done[step.id] = false;
+    }
   }
+  return done;
 }
 
 export default function LocationSetup() {
@@ -30,8 +35,8 @@ export default function LocationSetup() {
   const queryClient = useQueryClient();
   const tracking = useTracking();
   const checks = useSetupChecks();
-  const tip = brandTip();
-  const [brandDone, setBrandDone] = useState(readBrandDone);
+  const phone = phoneSteps();
+  const [manualDone, setManualDone] = useState(() => readManualDone(phone.steps));
 
   const readiness = tracking.data;
   // Re-check everything; the user may have changed settings in another screen.
@@ -79,13 +84,18 @@ export default function LocationSetup() {
     recheck();
   }
 
-  function markBrandDone() {
+  function markDone(id: string) {
     try {
-      localStorage.setItem(BRAND_DONE_KEY, 'yes');
+      localStorage.setItem(doneKey(id), 'yes');
     } catch {
       // Not remembered; harmless.
     }
-    setBrandDone(true);
+    setManualDone((done) => ({ ...done, [id]: true }));
+  }
+
+  async function openPage(step: PhoneStep) {
+    await openStepPage(step.open ?? []);
+    recheck();
   }
 
   const sharingOn = readiness?.tracking && readiness.servicesOn;
@@ -139,28 +149,47 @@ export default function LocationSetup() {
         action={<Button title="Allow" variant="secondary" onPress={stopBatteryOptimization} />}
       />
       <Step
-        done={brandDone}
-        title={`5. ${tip.brand} battery settings`}
-        body={tip.steps.map((s) => `• ${s}`).join('\n')}
-        action={
-          <View style={styles.row}>
-            <Button
-              title="App settings"
-              variant="secondary"
-              onPress={() => Linking.openSettings()}
-              style={styles.flex}
-            />
-            <Button title="I've done this" variant="secondary" onPress={markBrandDone} style={styles.flex} />
-          </View>
+        done={checks.data ? !checks.data.backgroundRestricted : false}
+        title="5. Background use allowed"
+        body={
+          'Android can mark an app as "Restricted", which stops it in the background. In app info, open Battery and choose Unrestricted or Optimized.'
         }
-        footer={
-          <Text
-            style={[typeStyles.bodyStrong, { color: colors.accentText }]}
-            onPress={() => Linking.openURL(tip.guideUrl)}>
-            Step-by-step guide for {tip.brand} phones
-          </Text>
+        action={
+          <Button title="App settings" variant="secondary" onPress={() => Linking.openSettings().then(recheck)} />
         }
       />
+
+      <Text style={[typeStyles.label, styles.section, { color: colors.muted }]}>
+        {`${phone.brand.toUpperCase()} SETTINGS`}
+      </Text>
+      {phone.steps.map((step, i) => {
+        // Checked by the app where the phone allows it, otherwise ticked by hand.
+        const auto = checks.data?.phone[step.id];
+        const done = auto ?? manualDone[step.id] ?? false;
+        return (
+          <Step
+            key={step.id}
+            done={done}
+            title={`${6 + i}. ${step.title}`}
+            body={step.body}
+            action={
+              <View style={styles.row}>
+                {step.open !== null && (
+                  <Button title="Open" variant="secondary" onPress={() => openPage(step)} style={styles.flex} />
+                )}
+                {auto === undefined && (
+                  <Button title="Done" variant="secondary" onPress={() => markDone(step.id)} style={styles.flex} />
+                )}
+              </View>
+            }
+          />
+        );
+      })}
+      <Text
+        style={[typeStyles.bodyStrong, styles.guide, { color: colors.accentText }]}
+        onPress={() => Linking.openURL(phone.guideUrl)}>
+        More help for {phone.brand} phones
+      </Text>
 
       <Text style={[typeStyles.caption, styles.note, { color: colors.muted }]}>
         {"Tip: don't swipe G Track away in Recent apps. On many phones that stops sharing until you open it again."}
@@ -212,6 +241,8 @@ const styles = StyleSheet.create({
   step: { borderRadius: radius.card, padding: 16, gap: 12 },
   stepHeader: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   row: { flexDirection: 'row', gap: 10 },
+  section: { marginTop: 12, marginLeft: 4 },
+  guide: { textAlign: 'center', marginTop: 4 },
   flex: { flex: 1 },
   note: { lineHeight: 19, marginTop: 4, textAlign: 'center' },
 });

@@ -2,6 +2,9 @@ import { useQuery } from '@tanstack/react-query';
 import * as Battery from 'expo-battery';
 import { PermissionsAndroid, Platform } from 'react-native';
 
+import GtrackAlarm from '../../../modules/gtrack-alarm';
+
+import { phoneSteps } from '@/features/location/phone-steps';
 import { pendingSummary } from '@/features/location/queue';
 import { syncTracking } from '@/features/location/tracking';
 import { useMyProfile } from '@/features/profile/api';
@@ -33,7 +36,14 @@ export function useSetupChecks() {
           ? true
           : await PermissionsAndroid.check('android.permission.POST_NOTIFICATIONS');
       const batteryOptimized = await Battery.isBatteryOptimizationEnabledAsync().catch(() => false);
-      return { notifications, batteryOptimized };
+      const backgroundRestricted = Platform.OS === 'android' && GtrackAlarm.isBackgroundRestricted();
+      // Phone-maker settings the app can read itself: step id → done (true), not done (false).
+      const phone: Record<string, boolean> = {};
+      for (const step of phoneSteps().steps) {
+        const done = step.check?.();
+        if (done != null) phone[step.id] = done;
+      }
+      return { notifications, batteryOptimized, backgroundRestricted, phone };
     },
   });
 }

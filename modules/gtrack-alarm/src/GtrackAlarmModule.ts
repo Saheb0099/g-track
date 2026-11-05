@@ -13,6 +13,10 @@ declare class GtrackAlarmModule extends NativeModule<{}> {
   ensure(): boolean;
   /** False if Android withheld exact-alarm access; ticks then come, but may be late. */
   canScheduleExact(): boolean;
+  /** True if the app's battery setting is "Restricted", which stops background work (Android 9+). */
+  isBackgroundRestricted(): boolean;
+  /** A phone setting's value, e.g. a maker's battery switch; null if missing or not readable. */
+  readSystemSetting(name: string): string | null;
 }
 
 export default requireNativeModule<GtrackAlarmModule>('GtrackAlarm');

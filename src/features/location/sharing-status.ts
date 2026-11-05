@@ -19,6 +19,11 @@ export function useSharingStatus(): SharingStatus | null {
     const n = pending.data.count;
     return { label: `Offline · ${n} point${n === 1 ? '' : 's'} will upload later`, tone: 'attention' };
   }
+  if (checks.data?.backgroundRestricted) return { label: 'Background use is restricted', tone: 'attention' };
   if (checks.data?.batteryOptimized) return { label: "You're sharing · finish battery setup", tone: 'attention' };
+  // A phone-maker setting the app could check (e.g. Vivo's sleep standby) is still in the way.
+  if (checks.data && Object.values(checks.data.phone).some((done) => !done)) {
+    return { label: "You're sharing · finish phone setup", tone: 'attention' };
+  }
   return { label: "You're sharing", tone: 'ok' };
 }
