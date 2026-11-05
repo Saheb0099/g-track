@@ -66,7 +66,13 @@
         }
       ],
       "@maplibre/maplibre-react-native",
-      "./plugins/with-release-signing"
+      "./plugins/with-release-signing",
+      [
+        "expo-navigation-bar",
+        {
+          "enforceContrast": false
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,

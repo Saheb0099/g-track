@@ -1,7 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
 import BottomSheet, { BottomSheetScrollView } from '@gorhom/bottom-sheet';
 import { BlurTargetView } from 'expo-blur';
-import { router, useFocusEffect } from 'expo-router';
+import { router, useFocusEffect, useIsFocused } from 'expo-router';
+import { NavigationBar } from 'expo-navigation-bar';
 import { StatusBar } from 'expo-status-bar';
 import { useCallback, useEffect, useRef, useState, type ComponentRef } from 'react';
 import { ActivityIndicator, BackHandler, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
@@ -35,6 +36,7 @@ const PERSON_PEEK = 300;
 export default function Home() {
   const colors = useColors();
   const darkMap = useMapIsDark();
+  const focused = useIsFocused();
   const safe = useSafeAreaInsets();
   const { height } = useWindowDimensions();
   const { session } = useAuth();
@@ -130,6 +132,10 @@ export default function Home() {
   return (
     <View style={styles.container}>
       <StatusBar style={darkMap ? 'light' : 'dark'} />
+      {/* The navigation buttons sit over the map here, so they follow its brightness (a light map
+          stays light in dark mode). Only while this screen is showing: screens opened over it
+          follow the app's theme (root layout). */}
+      {focused && <NavigationBar style={darkMap ? 'light' : 'dark'} />}
       <BlurTargetView ref={blurTarget} style={StyleSheet.absoluteFill}>
         <GroupMap
           ref={map}

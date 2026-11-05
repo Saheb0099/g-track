@@ -6,6 +6,7 @@ import {
   Inter_800ExtraBold,
   useFonts,
 } from '@expo-google-fonts/inter';
+import { NavigationBar } from 'expo-navigation-bar';
 import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { useEffect } from 'react';
@@ -57,6 +58,9 @@ function RootStack() {
 
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+      {/* Android's navigation buttons follow G Track's theme (including a chosen Light or Dark),
+          not the phone's: light buttons in dark mode, dark ones in light mode. */}
+      <NavigationBar style={colorScheme === 'dark' ? 'light' : 'dark'} />
       <Stack screenOptions={{ headerShown: false }}>
         <Stack.Protected guard={!session}>
           <Stack.Screen name="sign-in" />
