@@ -195,18 +195,8 @@ const BRANDS: { match: RegExp; steps: PhoneSteps }[] = [
   },
 ];
 
-const OTHER: PhoneSteps = {
-  brand: 'Your phone',
-  guideUrl: 'https://dontkillmyapp.com',
-  steps: [
-    {
-      id: 'other-battery',
-      title: 'Battery: Unrestricted',
-      body: "In G Track's app info, open Battery and choose Unrestricted.",
-      open: [],
-    },
-  ],
-};
+// Other phones: Android's own battery setting (step 4 of setup) is all there is.
+const OTHER: PhoneSteps = { brand: 'Your phone', guideUrl: 'https://dontkillmyapp.com', steps: [] };
 
 export function phoneSteps(): PhoneSteps {
   const maker = `${Device.manufacturer ?? ''} ${Device.brand ?? ''}`.toLowerCase();

@@ -142,26 +142,27 @@ export default function LocationSetup() {
         body={'Shows the "G Track is sharing your location" notification, so you always know when sharing is on.'}
         action={<Button title="Allow" variant="secondary" onPress={allowNotifications} />}
       />
+      {/* One Android setting with three choices (Unrestricted, Optimized, Restricted): done when
+          it's Unrestricted, which also rules out Restricted. */}
       <Step
-        done={checks.data ? !checks.data.batteryOptimized : false}
-        title="4. Battery: don't optimize"
-        body="Stops Android from pausing G Track to save battery."
-        action={<Button title="Allow" variant="secondary" onPress={stopBatteryOptimization} />}
-      />
-      <Step
-        done={checks.data ? !checks.data.backgroundRestricted : false}
-        title="5. Background use allowed"
-        body={
-          'Android can mark an app as "Restricted", which stops it in the background. In app info, open Battery and choose Unrestricted or Optimized.'
-        }
+        done={checks.data ? !checks.data.batteryOptimized && !checks.data.backgroundRestricted : false}
+        title="4. Battery: Unrestricted"
+        body="Stops Android from pausing or restricting G Track to save battery."
         action={
-          <Button title="App settings" variant="secondary" onPress={() => Linking.openSettings().then(recheck)} />
+          checks.data?.backgroundRestricted ? (
+            // Android's "don't optimize" prompt can't undo Restricted; that's only in app info → Battery.
+            <Button title="App settings" variant="secondary" onPress={() => Linking.openSettings().then(recheck)} />
+          ) : (
+            <Button title="Allow" variant="secondary" onPress={stopBatteryOptimization} />
+          )
         }
       />
 
-      <Text style={[typeStyles.label, styles.section, { color: colors.muted }]}>
-        {`${phone.brand.toUpperCase()} SETTINGS`}
-      </Text>
+      {phone.steps.length > 0 && (
+        <Text style={[typeStyles.label, styles.section, { color: colors.muted }]}>
+          {`${phone.brand.toUpperCase()} SETTINGS`}
+        </Text>
+      )}
       {phone.steps.map((step, i) => {
         // Checked by the app where the phone allows it, otherwise ticked by hand.
         const auto = checks.data?.phone[step.id];
@@ -170,7 +171,7 @@ export default function LocationSetup() {
           <Step
             key={step.id}
             done={done}
-            title={`${6 + i}. ${step.title}`}
+            title={`${5 + i}. ${step.title}`}
             body={step.body}
             action={
               <View style={styles.row}>
@@ -191,9 +192,12 @@ export default function LocationSetup() {
         More help for {phone.brand} phones
       </Text>
 
-      <Text style={[typeStyles.caption, styles.note, { color: colors.muted }]}>
-        {"Tip: don't swipe G Track away in Recent apps. On many phones that stops sharing until you open it again."}
-      </Text>
+      {/* Phones with a "Lock in Recent apps" step already say this. */}
+      {!phone.steps.some((step) => step.id === 'lock-recents') && (
+        <Text style={[typeStyles.caption, styles.note, { color: colors.muted }]}>
+          {"Tip: don't swipe G Track away in Recent apps. On many phones that stops sharing until you open it again."}
+        </Text>
+      )}
     </ScrollView>
   );
 }
