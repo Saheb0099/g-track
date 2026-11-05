@@ -10,12 +10,13 @@ import { Card, RowDivider, SectionLabel } from '@/components/card';
 import { TextField } from '@/components/text-field';
 import { useSharingStatus } from '@/features/location/sharing-status';
 import { useChosenMapStyle } from '@/features/map/styles';
-import { useMyProfile, useSetDisplayName, useSetSharing } from '@/features/profile/api';
+import { type SharingChoice, useMyProfile, useSetDisplayName, useSetSharing } from '@/features/profile/api';
 import { APP_VERSION, useUpdateAvailable } from '@/lib/app-version';
 import { setTheme, THEMES, useTheme, type Theme } from '@/lib/appearance';
 import { deleteAccount, signOut, useAuth } from '@/lib/auth';
 import { friendlyError } from '@/lib/errors';
 import { fonts, radius, type as typeStyles, useColors } from '@/lib/theme';
+import { untilText } from '@/lib/time';
 
 const THEME_LABELS: Record<Theme, string> = { system: 'Automatic', light: 'Light', dark: 'Dark' };
 
@@ -35,10 +36,28 @@ export default function Settings() {
   const name = profile.data?.display_name ?? '';
   const sharing = profile.data?.sharing_enabled ?? true;
 
-  function toggleSharing(on: boolean) {
-    setSharing.mutate(on, {
+  const pausedUntil = profile.data?.paused_until ?? null;
+
+  function saveSharing(choice: SharingChoice) {
+    setSharing.mutate(choice, {
       onError: (e) => Alert.alert("Couldn't change sharing", friendlyError(e)),
     });
+  }
+
+  function toggleSharing(on: boolean) {
+    if (on) return saveSharing({ enabled: true });
+    const inHours = (h: number) => new Date(Date.now() + h * 60 * 60_000);
+    // Android shows at most 3 buttons, stacked last-first (so 1 hour is on top); tapping outside cancels.
+    Alert.alert(
+      'Pause sharing',
+      'Your groups will see your past week, but not where you are now.',
+      [
+        { text: 'Until I turn it on', onPress: () => saveSharing({ enabled: false, until: null }) },
+        { text: '8 hours', onPress: () => saveSharing({ enabled: false, until: inHours(8) }) },
+        { text: '1 hour', onPress: () => saveSharing({ enabled: false, until: inHours(1) }) },
+      ],
+      { cancelable: true },
+    );
   }
 
   function confirmDelete() {
@@ -101,7 +120,7 @@ export default function Settings() {
               <Text style={[typeStyles.caption, { color: colors.muted }]}>
                 {sharing
                   ? 'Your groups see where you are now'
-                  : 'Paused. Your groups see your past week, not where you are now'}
+                  : `${pausedUntil ? `Paused until ${untilText(pausedUntil)}` : 'Paused'}. Your groups see your past week, not where you are now`}
               </Text>
             </View>
             <Switch

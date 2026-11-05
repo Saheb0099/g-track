@@ -17,10 +17,11 @@ import { useMyProfile } from '@/features/profile/api';
 export function useTracking() {
   const profile = useMyProfile();
   const sharing = profile.data?.sharing_enabled;
+  const pausedUntil = profile.data?.paused_until ?? null;
   return useQuery({
-    queryKey: ['tracking', sharing],
+    queryKey: ['tracking', sharing, pausedUntil],
     enabled: sharing !== undefined,
-    queryFn: () => syncTracking(sharing!),
+    queryFn: () => syncTracking(sharing!, pausedUntil),
     staleTime: 60_000,
   });
 }

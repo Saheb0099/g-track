@@ -64,16 +64,19 @@ export type Database = {
       group_members: {
         Row: {
           group_id: string
+          hidden_at: string | null
           joined_at: string
           user_id: string
         }
         Insert: {
           group_id: string
+          hidden_at?: string | null
           joined_at?: string
           user_id: string
         }
         Update: {
           group_id?: string
+          hidden_at?: string | null
           joined_at?: string
           user_id?: string
         }
@@ -234,6 +237,7 @@ export type Database = {
           display_name: string
           id: string
           last_seen_at: string | null
+          paused_until: string | null
           sharing_enabled: boolean
           status: Database["public"]["Enums"]["device_status"]
         }
@@ -244,6 +248,7 @@ export type Database = {
           display_name: string
           id: string
           last_seen_at?: string | null
+          paused_until?: string | null
           sharing_enabled?: boolean
           status?: Database["public"]["Enums"]["device_status"]
         }
@@ -254,6 +259,7 @@ export type Database = {
           display_name?: string
           id?: string
           last_seen_at?: string | null
+          paused_until?: string | null
           sharing_enabled?: boolean
           status?: Database["public"]["Enums"]["device_status"]
         }
@@ -302,6 +308,10 @@ export type Database = {
           p_group_id: string
           p_save_every_min: number
         }
+        Returns: undefined
+      }
+      set_hidden_from_group: {
+        Args: { p_group_id: string; p_hidden: boolean }
         Returns: undefined
       }
       transfer_admin: {

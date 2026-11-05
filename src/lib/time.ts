@@ -17,3 +17,13 @@ export function timeAgoShort(iso: string, now = Date.now()): string {
   const hours = Math.round(minutes / 60);
   return hours < 24 ? `${hours} h` : `${Math.round(hours / 24)} d`;
 }
+
+/** When a pause ends: "6:30 PM", or "tomorrow 2:30 AM" when that's not today. */
+export function untilText(iso: string, now = new Date()): string {
+  const end = new Date(iso);
+  const clock = end.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  if (end.toDateString() === now.toDateString()) return clock;
+  const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+  if (end.toDateString() === tomorrow.toDateString()) return `tomorrow ${clock}`;
+  return `${end.toLocaleDateString(undefined, { day: 'numeric', month: 'short' })} ${clock}`;
+}

@@ -445,6 +445,121 @@ select is((select count(*) from public.preview_group(tests.get('dave_code'))), 1
 select throws_ok($$ select 1 from private.join_code_misses $$, '42501', null, 'Users cannot read the wrong-code list');
 reset role;
 
+-- ---------------------------------------------------------------------------
+-- Pausing for a set time
+-- ---------------------------------------------------------------------------
+
+insert into auth.users (id, email, aud, role, raw_user_meta_data) values
+  ('eeeeeeee-0000-4000-8000-000000000005', 'erin@test.local', 'authenticated', 'authenticated', '{"name": "Erin"}'),
+  ('ffffffff-0000-4000-8000-000000000006', 'frank@test.local', 'authenticated', 'authenticated', '{"name": "Frank"}'),
+  ('99999999-0000-4000-8000-000000000007', 'gina@test.local', 'authenticated', 'authenticated', '{"name": "Gina"}');
+create function tests.login_as(p_id uuid) returns void language plpgsql as $$
+begin
+  perform set_config('request.jwt.claims', json_build_object('sub', p_id, 'role', 'authenticated')::text, true);
+  perform set_config('role', 'authenticated', true);
+end;
+$$;
+create function tests.erin() returns uuid language sql immutable as $$ select 'eeeeeeee-0000-4000-8000-000000000005'::uuid $$;
+create function tests.frank() returns uuid language sql immutable as $$ select 'ffffffff-0000-4000-8000-000000000006'::uuid $$;
+create function tests.gina() returns uuid language sql immutable as $$ select '99999999-0000-4000-8000-000000000007'::uuid $$;
+grant execute on function tests.login_as(uuid), tests.erin(), tests.frank(), tests.gina() to authenticated;
+
+select tests.login_as(tests.frank());
+select lives_ok($$
+  update public.profiles set sharing_enabled = false, paused_until = now() + interval '1 hour' where id = tests.frank()
+$$, 'You can pause for a set time');
+select lives_ok($$ update public.profiles set sharing_enabled = true where id = tests.frank() $$,
+  'You can turn sharing back on early');
+select is((select paused_until from public.profiles where id = tests.frank()), null,
+  'Turning sharing on clears the pause end');
+select lives_ok($$
+  update public.profiles set sharing_enabled = false, paused_until = now() - interval '1 minute' where id = tests.frank()
+$$, 'A pause whose time is up');
+reset role;
+select is((select schedule from cron.job where jobname = 'resume-timed-pauses'), '* * * * *',
+  'The resume job runs every minute');
+do $$ begin execute (select command from cron.job where jobname = 'resume-timed-pauses'); end $$;
+select is((select sharing_enabled::text || ' ' || coalesce(paused_until::text, 'none') from public.profiles
+  where id = tests.frank()), 'true none', 'Sharing turns back on when the pause is up');
+
+-- ---------------------------------------------------------------------------
+-- Not sharing with one group
+-- ---------------------------------------------------------------------------
+
+-- Erin and Frank share one group; Frank and Gina share another.
+select tests.login_as(tests.erin());
+insert into tests.ctx (k, v)
+select unnest(array['g2', 'g2_code']), unnest(array[g.group_id::text, g.invite_code])
+from public.create_group('Erin and Frank') g;
+select tests.login_as(tests.gina());
+insert into tests.ctx (k, v)
+select unnest(array['g3', 'g3_code']), unnest(array[g.group_id::text, g.invite_code])
+from public.create_group('Frank and Gina') g;
+select tests.login_as(tests.frank());
+select lives_ok($$ select public.join_group(tests.get('g2_code')), public.join_group(tests.get('g3_code')) $$,
+  'Frank joins both groups');
+select lives_ok($$
+  insert into public.locations (lat, lng, recorded_at) values
+    (22.5, 88.3, now() - interval '30 minutes'),
+    (22.6, 88.4, now() - interval '10 minutes')
+$$, 'Frank uploads a point before and one during the hidden time');
+select lives_ok($$ select public.set_hidden_from_group(tests.get('g2')::uuid, true) $$,
+  'Frank stops sharing with one group');
+reset role;
+update public.group_members set hidden_at = now() - interval '20 minutes'
+  where group_id = tests.get('g2')::uuid and user_id = tests.frank();
+
+select tests.login_as(tests.erin());
+select is_empty($$ select 1 from public.latest_locations where user_id = tests.frank() $$,
+  'That group cannot see where he is now');
+select is((select count(*) from public.locations where user_id = tests.frank()), 1::bigint,
+  'That group sees only history from before he stopped sharing');
+select isnt_empty($$ select 1 from public.group_members where user_id = tests.frank() and hidden_at is not null $$,
+  'That group can tell he is not sharing with them');
+select tests.login_as(tests.gina());
+select isnt_empty($$ select 1 from public.latest_locations where user_id = tests.frank() $$,
+  'His other group still sees where he is');
+select is((select count(*) from public.locations where user_id = tests.frank()), 2::bigint,
+  'His other group still sees all his history');
+
+select tests.login_as(tests.frank());
+select lives_ok($$ select public.set_hidden_from_group(tests.get('g2')::uuid, false) $$,
+  'Frank shares with the group again');
+-- now() doesn't move inside a test run, so end the hidden stretch 5 minutes ago by hand.
+reset role;
+update private.group_hidden_periods set ended_at = now() - interval '5 minutes' where user_id = tests.frank();
+select tests.login_as(tests.erin());
+select isnt_empty($$ select 1 from public.latest_locations where user_id = tests.frank() $$,
+  'The group sees where he is again');
+select is((select count(*) from public.locations where user_id = tests.frank()), 1::bigint,
+  'Points from the hidden time stay hidden afterwards');
+
+-- Leaving while hidden, then rejoining, doesn't reveal the hidden time either.
+select tests.login_as(tests.frank());
+select lives_ok($$ insert into public.locations (lat, lng, recorded_at) values (22.7, 88.5, now() - interval '3 minutes') $$,
+  'Frank uploads another point');
+select tests.login_as(tests.erin());
+select is((select count(*) from public.locations where user_id = tests.frank()), 2::bigint,
+  'The group sees points from after he shared again');
+select tests.login_as(tests.frank());
+select lives_ok($$ select public.set_hidden_from_group(tests.get('g2')::uuid, true) $$, 'Frank hides again');
+reset role;
+update public.group_members set hidden_at = now() - interval '4 minutes'
+  where group_id = tests.get('g2')::uuid and user_id = tests.frank();
+select tests.login_as(tests.frank());
+select lives_ok($$ select public.leave_group(tests.get('g2')::uuid) $$, 'Frank leaves while hidden');
+select lives_ok($$ select public.join_group(tests.get('g2_code')) $$, 'Frank rejoins');
+select tests.login_as(tests.erin());
+select is((select count(*) from public.locations where user_id = tests.frank()), 1::bigint,
+  'Rejoining does not reveal points from while he was hidden');
+
+select tests.login('carol');
+select throws_ok($$ select public.set_hidden_from_group(tests.get('g2')::uuid, true) $$, 'not_member',
+  'Only members can hide from a group');
+select throws_ok($$ select 1 from private.group_hidden_periods $$, '42501', null,
+  'Users cannot read the hidden times');
+reset role;
+
 set local role anon;
 select throws_ok($$ select public.create_group('Anon') $$, '42501', null, 'Signed-out users cannot call functions');
 select throws_ok($$ select 1 from public.locations $$, '42501', null, 'Signed-out users cannot read locations');

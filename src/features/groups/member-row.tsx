@@ -11,6 +11,7 @@ import { timeAgo } from '@/lib/time';
 /** "2 min ago · ±8 m", "Paused", "Location is off"… for a person's row. */
 export function statusLine(member: Member, position: LivePosition | undefined, now: number, staleMs: number): string {
   if (member.deletedAt) return 'Account deleted';
+  if (member.hiddenAt) return 'Not sharing with this group';
   if (!member.sharingEnabled) return 'Sharing paused';
   if (member.status === 'location_off') return 'Location is off';
   if (member.status === 'permission_missing') return 'Location permission missing';

@@ -25,7 +25,10 @@ type Props = {
 /** The sheet when nobody is selected: who's in the group and how each phone is doing. */
 export function PeoplePanel({ group, members, positions, now, meId, onSelect }: Props) {
   const colors = useColors();
-  const status = useSharingStatus();
+  const sharingStatus = useSharingStatus();
+  // Not sharing with this group (but sharing in general): say so, and lead to the switch.
+  const hiddenHere = !!members.find((m) => m.userId === meId)?.hiddenAt && sharingStatus?.tone !== 'off';
+  const status = hiddenHere ? { label: 'Not sharing with this group', tone: 'off' as const } : sharingStatus;
   const update = useUpdateAvailable();
   const isAdmin = group.adminId === meId;
   const byUser = new globalThis.Map(positions.map((p) => [p.userId, p]));
@@ -49,9 +52,9 @@ export function PeoplePanel({ group, members, positions, now, meId, onSelect }: 
       {/* Own line, under the heading and button, so it never wraps beside them. */}
       {status && (
         <Pressable
-          onPress={() => router.push('/setup')}
+          onPress={() => (hiddenHere ? openSettings() : router.push('/setup'))}
           accessibilityRole="button"
-          accessibilityHint="Opens location sharing setup"
+          accessibilityHint={hiddenHere ? "Opens the group's settings" : 'Opens location sharing setup'}
           style={styles.status}
           hitSlop={8}>
           <View style={[styles.dot, { backgroundColor: dot }]} />

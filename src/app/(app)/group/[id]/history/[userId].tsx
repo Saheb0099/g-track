@@ -25,7 +25,7 @@ import { SheetArea, SheetBackground } from '@/components/sheet-background';
 import { useMembers } from '@/features/groups/api';
 import { useDayHistory, useRecentDays } from '@/features/history/api';
 import { HistoryMap, type HistoryMapHandle } from '@/features/history/history-map';
-import { buildTimeline, travelledM, type Stay, type TimelineItem } from '@/features/history/timeline';
+import { buildTimeline, formatDistance, travelledM, type Stay, type TimelineItem } from '@/features/history/timeline';
 import { useMapIsDark } from '@/features/map/styles';
 import { useAuth } from '@/lib/auth';
 import { friendlyError } from '@/lib/errors';
@@ -40,8 +40,6 @@ function duration(ms: number) {
   const m = minutes % 60;
   return m ? `${h} h ${String(m).padStart(2, '0')} min` : `${h} h`;
 }
-
-const distance = (m: number) => (m < 1000 ? `${Math.round(m)} m` : `${(m / 1000).toFixed(1)} km`);
 
 export default function MemberHistory() {
   const colors = useColors();
@@ -171,7 +169,7 @@ export default function MemberHistory() {
                 <>
                   <View style={styles.tiles}>
                     <StatTile label="places" value={String(stays.length)} />
-                    <StatTile label="travelled" value={distance(travelledM(timeline))} />
+                    <StatTile label="travelled" value={formatDistance(travelledM(timeline))} />
                     <StatTile label="first point" value={clock(points[0].time)} />
                   </View>
                   {timeline.length === 0 && (
@@ -250,7 +248,7 @@ function TimelineRow({
           <View style={styles.trip}>
             <Ionicons name="navigate" size={13} color={colors.muted} />
             <Text style={[typeStyles.caption, { color: colors.muted, fontSize: 14 }]}>
-              Moved {distance(item.distanceM)} in {duration(item.to - item.from)}
+              Moved {formatDistance(item.distanceM)} in {duration(item.to - item.from)}
             </Text>
           </View>
         )}

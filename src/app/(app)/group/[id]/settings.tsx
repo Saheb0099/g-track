@@ -8,6 +8,7 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
+  Switch,
   Text,
   View,
 } from 'react-native';
@@ -29,6 +30,7 @@ import {
   useRenameGroup,
   useRestoreGroup,
   useSetGroupTiming,
+  useSetHiddenFromGroup,
   useTransferAdmin,
   type Member,
 } from '@/features/groups/api';
@@ -64,6 +66,7 @@ export default function GroupSettings() {
   const timing = useSetGroupTiming(id);
   const deleteGroup = useDeleteGroup(id);
   const restoreGroup = useRestoreGroup(id);
+  const setHidden = useSetHiddenFromGroup(id, me);
   const [now] = useState(() => Date.now());
 
   const close = () => router.back();
@@ -93,6 +96,19 @@ export default function GroupSettings() {
   const memberList = members.data ?? [];
   const admin = memberList.find((m) => m.userId === adminId);
   const others = memberList.filter((m) => m.userId !== me);
+  const sharingHere = !memberList.find((m) => m.userId === me)?.hiddenAt;
+
+  function toggleSharingHere(on: boolean) {
+    if (on) return setHidden.mutate(false, { onError: showError });
+    Alert.alert(
+      `Stop sharing with ${groupName}?`,
+      "They won't see where you are, or where you go while this is off, even after you turn it back on. Your other groups still see you.",
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Stop sharing', onPress: () => setHidden.mutate(true, { onError: showError }) },
+      ],
+    );
+  }
 
   function confirmNewCode() {
     Alert.alert('Make a new code?', 'The current code and invite link will stop working.', [
@@ -291,6 +307,36 @@ export default function GroupSettings() {
         </View>
 
         <View style={styles.section}>
+          <SectionLabel>Your location</SectionLabel>
+          <Card>
+            <View style={styles.switchRow}>
+              <View style={[styles.icon, { backgroundColor: sharingHere ? colors.accentFill : colors.fill }]}>
+                <Ionicons
+                  name={sharingHere ? 'radio' : 'eye-off'}
+                  size={18}
+                  color={sharingHere ? colors.accent : colors.muted}
+                />
+              </View>
+              <View style={styles.flex}>
+                <Text style={[typeStyles.bodyStrong, { color: colors.text }]}>Share with this group</Text>
+                <Text style={[typeStyles.caption, { color: colors.muted }]}>
+                  {sharingHere
+                    ? 'This group sees where you are'
+                    : "Off. This group doesn't see where you are or where you go"}
+                </Text>
+              </View>
+              <Switch
+                value={sharingHere}
+                onValueChange={toggleSharingHere}
+                accessibilityLabel="Share with this group"
+                trackColor={{ true: colors.accent, false: colors.fill }}
+                thumbColor="#FFFFFF"
+              />
+            </View>
+          </Card>
+        </View>
+
+        <View style={styles.section}>
           <SectionLabel>Location timing</SectionLabel>
           {/* Keyed by the saved timing so the controls reset after saving. */}
           <TimingForm
@@ -469,6 +515,15 @@ const styles = StyleSheet.create({
   section: { gap: 8 },
   adminChip: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: radius.pill },
   more: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
+  switchRow: {
+    minHeight: 64,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  icon: { width: 36, height: 36, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
   renameRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 10 },
   saveButton: { height: 54, borderRadius: 16 },
   stepRow: { minHeight: 60, flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 14 },

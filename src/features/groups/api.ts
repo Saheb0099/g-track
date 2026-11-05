@@ -27,6 +27,8 @@ export type Member = {
   lastSeenAt: string | null;
   /** Set while their account waits out the 7 days before it's removed. */
   deletedAt: string | null;
+  /** Set while they've stopped sharing with this group (sharingEnabled is then false too). */
+  hiddenAt: string | null;
 };
 
 export type GroupPreview = {
@@ -133,7 +135,7 @@ export function useMembers(groupId: string) {
       const { data, error } = await supabase
         .from('group_members')
         .select(
-          'user_id, joined_at, profiles(display_name, avatar_url, status, sharing_enabled, last_seen_at, deleted_at)',
+          'user_id, joined_at, hidden_at, profiles(display_name, avatar_url, status, sharing_enabled, last_seen_at, deleted_at)',
         )
         .eq('group_id', groupId)
         .order('joined_at');
@@ -147,9 +149,11 @@ export function useMembers(groupId: string) {
                 displayName: m.profiles.display_name,
                 avatarUrl: m.profiles.avatar_url,
                 status: m.profiles.status,
-                sharingEnabled: m.profiles.sharing_enabled,
+                // Not sharing with this group looks the same as paused, here.
+                sharingEnabled: m.profiles.sharing_enabled && !m.hidden_at,
                 lastSeenAt: m.profiles.last_seen_at,
                 deletedAt: m.profiles.deleted_at,
+                hiddenAt: m.hidden_at,
               },
             ]
           : [],
@@ -334,6 +338,33 @@ export function useTransferAdmin(groupId: string) {
       queryClient.invalidateQueries({ queryKey: keys.groups });
       queryClient.removeQueries({ queryKey: keys.invite(groupId) });
     },
+  });
+}
+
+/**
+ * Stops (or restarts) sharing your location with this one group. While stopped, the group sees
+ * neither where you are nor where you went, even after you share again.
+ */
+export function useSetHiddenFromGroup(groupId: string, me: string | undefined) {
+  const queryClient = useQueryClient();
+  const key = keys.members(groupId);
+  return useMutation({
+    mutationFn: async (hidden: boolean) => {
+      const { error } = await supabase.rpc('set_hidden_from_group', { p_group_id: groupId, p_hidden: hidden });
+      if (error) throw error;
+    },
+    // Flip the switch at once; a failure puts it back.
+    onMutate: (hidden) => {
+      const before = queryClient.getQueryData<Member[]>(key);
+      queryClient.setQueryData<Member[]>(key, (list) =>
+        list?.map((m) => (m.userId === me ? { ...m, hiddenAt: hidden ? new Date().toISOString() : null } : m)),
+      );
+      return { before };
+    },
+    onError: (_error, _hidden, context) => {
+      if (context?.before) queryClient.setQueryData(key, context.before);
+    },
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ['group', groupId] }),
   });
 }
 

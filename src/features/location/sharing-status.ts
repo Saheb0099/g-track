@@ -1,5 +1,6 @@
 import { usePendingUploads, useSetupChecks, useTracking } from '@/features/location/use-tracking';
 import { useMyProfile } from '@/features/profile/api';
+import { untilText } from '@/lib/time';
 
 export type SharingStatus = { label: string; tone: 'ok' | 'attention' | 'off' };
 
@@ -12,7 +13,10 @@ export function useSharingStatus(): SharingStatus | null {
 
   if (!profile.data || !tracking.data) return null;
   const r = tracking.data;
-  if (!profile.data.sharing_enabled) return { label: 'Sharing paused', tone: 'off' };
+  if (!profile.data.sharing_enabled) {
+    const until = profile.data.paused_until;
+    return { label: until ? `Sharing paused until ${untilText(until)}` : 'Sharing paused', tone: 'off' };
+  }
   if (!r.foreground || !r.background) return { label: 'Set up location sharing', tone: 'attention' };
   if (!r.servicesOn) return { label: 'Location is off on this phone', tone: 'attention' };
   if (pending.data?.offline) {

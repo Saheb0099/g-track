@@ -328,6 +328,31 @@ export async function startTracking() {
   await Location.startLocationUpdatesAsync(LOCATION_TASK, updateOptions(await getSchedule()));
 }
 
+/**
+ * A pause with an end time: the location service stops (so nothing is recorded and the
+ * notification goes), but the alarm and heartbeat keep checking in, so sharing comes back by
+ * itself once the server lifts the pause. Plain pauses stop everything (stopTracking).
+ */
+async function pauseForNow() {
+  if (await Location.hasStartedLocationUpdatesAsync(LOCATION_TASK)) {
+    await Location.stopLocationUpdatesAsync(LOCATION_TASK);
+  }
+  if (!GtrackAlarm.isRunning()) GtrackAlarm.start(ALARM_EVERY_MS);
+  else GtrackAlarm.ensure();
+  if (!(await TaskManager.isTaskRegisteredAsync(HEARTBEAT_TASK))) {
+    await BackgroundTask.registerTaskAsync(HEARTBEAT_TASK, { minimumInterval: HEARTBEAT_MINUTES });
+  }
+}
+
+/**
+ * Whether this phone last heard of a pause that hasn't ended yet. Offline, the server can't be
+ * asked, and a check-in mustn't record a point during a pause.
+ */
+async function pausedLocally(): Promise<boolean> {
+  const until = await getState<number>('paused_until');
+  return until != null && Date.now() < until;
+}
+
 export async function stopTracking() {
   GtrackAlarm.stop();
   if (await Location.hasStartedLocationUpdatesAsync(LOCATION_TASK)) {
@@ -360,6 +385,15 @@ export async function checkIn(reason: 'alarm' | 'heartbeat') {
   if (check.allowed === 'paused') {
     await logEvent(`${reason}: sharing is paused on the server; stopping`);
     await stopTracking();
+    return;
+  }
+  if (check.allowed === 'paused_for_now') {
+    await logEvent(`${reason}: sharing is paused for a while; waiting`);
+    await pauseForNow();
+    return;
+  }
+  if (check.allowed === 'unknown' && (await pausedLocally())) {
+    await logEvent(`${reason}: offline during a pause; not recording`);
     return;
   }
 
@@ -406,7 +440,7 @@ export async function checkIn(reason: 'alarm' | 'heartbeat') {
   );
 }
 
-type Allowed = 'yes' | 'signed_out' | 'paused' | 'unknown';
+type Allowed = 'yes' | 'signed_out' | 'paused' | 'paused_for_now' | 'unknown';
 
 /**
  * Whether this phone should still be sharing, as far as the server says. A phone can lose its
@@ -422,14 +456,23 @@ async function sharingAllowed(): Promise<Allowed> {
   if (!data.session) return 'signed_out';
   const profile = await supabase
     .from('profiles')
-    .select('sharing_enabled, deleted_at')
+    .select('sharing_enabled, paused_until, deleted_at')
     .eq('id', data.session.user.id)
     .maybeSingle();
   if (profile.error) return 'unknown';
   // No profile: the account was removed.
   if (!profile.data) return 'signed_out';
   // Deleted on another phone: its sign-in here still works for the 7 days, but it shouldn't share.
-  return profile.data.sharing_enabled && !profile.data.deleted_at ? 'yes' : 'paused';
+  if (profile.data.deleted_at) return 'paused';
+  if (profile.data.sharing_enabled) {
+    await setState('paused_until', null);
+    return 'yes';
+  }
+  if (profile.data.paused_until) {
+    await setState('paused_until', Date.parse(profile.data.paused_until));
+    return 'paused_for_now';
+  }
+  return 'paused';
 }
 
 /** Picks up a changed group timing and restarts location checks at the new pace. */
@@ -463,12 +506,16 @@ export async function markReadingReceived() {
  * Brings tracking in line with the user's choice and the phone's permissions, reports the
  * status to friends, and sends a fresh point. Called when the app opens or comes to the front.
  */
-export async function syncTracking(sharingEnabled: boolean): Promise<Readiness> {
+export async function syncTracking(sharingEnabled: boolean, pausedUntil: string | null): Promise<Readiness> {
   const readiness = await getReadiness();
   await reportStatus(statusFor(readiness)).catch(() => {});
 
-  const canTrack = sharingEnabled && readiness.foreground && readiness.background;
-  if (canTrack) {
+  const permitted = readiness.foreground && readiness.background;
+  const canTrack = sharingEnabled && permitted;
+  await setState('paused_until', !sharingEnabled && pausedUntil ? Date.parse(pausedUntil) : null);
+  if (!sharingEnabled && pausedUntil && permitted) {
+    await pauseForNow().catch(() => {});
+  } else if (canTrack) {
     // Fetched first so the service starts at the groups' pace; offline, the remembered one is used.
     await refreshSchedule().catch(() => {});
     // If Android refuses to start the service right now, the next sync or heartbeat retries.

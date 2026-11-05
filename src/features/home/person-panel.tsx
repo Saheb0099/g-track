@@ -9,7 +9,7 @@ import { StatTile } from '@/components/card';
 import type { Member } from '@/features/groups/api';
 import { statusLine } from '@/features/groups/member-row';
 import { useDayHistory, useRecentDays } from '@/features/history/api';
-import { buildTimeline } from '@/features/history/timeline';
+import { buildTimeline, formatDistance, travelledM } from '@/features/history/timeline';
 import { distanceMeters } from '@/features/location/rules';
 import type { LivePosition } from '@/features/map/api';
 import { type as typeStyles, useColors } from '@/lib/theme';
@@ -48,13 +48,14 @@ export function PersonPanel({
   const today = useRecentDays()[0];
   const history = useDayHistory(member.userId, today);
 
+  const timeline = useMemo(() => buildTimeline(history.data ?? []), [history.data]);
   // "Here since 9:10 AM" when today's last stay is still going on.
   const hereSince = useMemo(() => {
-    const last = buildTimeline(history.data ?? []).at(-1);
+    const last = timeline.at(-1);
     return last?.kind === 'stay' && position && Date.parse(position.recordedAt) - last.to < 15 * 60_000
       ? last.from
       : null;
-  }, [history.data, position]);
+  }, [timeline, position]);
 
   const status = position
     ? hereSince
@@ -100,10 +101,8 @@ export function PersonPanel({
       {position && (
         <View style={styles.tiles}>
           <StatTile label="Updated" value={timeAgoShort(position.recordedAt, now)} />
-          <StatTile
-            label="Accuracy"
-            value={position.accuracyM != null ? `±${Math.round(position.accuracyM)} m` : '—'}
-          />
+          {/* Distance travelled today, as on the history page. Accuracy is in the People list. */}
+          <StatTile label="Today" value={history.data ? formatDistance(travelledM(timeline)) : '—'} />
           <StatTile
             label="Battery"
             value={battery != null ? `${battery}%` : '—'}

@@ -8,7 +8,7 @@ import { supabase } from '@/lib/supabase';
 async function fetchProfile(userId: string) {
   const { data, error } = await supabase
     .from('profiles')
-    .select('display_name, avatar_url, sharing_enabled, status, deleted_at')
+    .select('display_name, avatar_url, sharing_enabled, paused_until, status, deleted_at')
     .eq('id', userId)
     .single();
   if (error) throw error;
@@ -24,12 +24,19 @@ export function useMyProfile() {
     queryKey: ['profile', userId],
     enabled: !!userId,
     queryFn: () => fetchProfile(userId!),
+    // During a pause with an end time, notice soon after the server lifts it.
+    refetchInterval: (query) => (query.state.data?.paused_until ? 60_000 : false),
   });
 }
 
+/** How sharing is set: on, or paused (until a time, or until turned back on). */
+export type SharingChoice = { enabled: true } | { enabled: false; until: Date | null };
+
 /**
  * Turns sharing on or off. Paused, friends no longer see where you are now and nothing new is
- * recorded, but the history you already have stays. Tracking follows through useTracking.
+ * recorded, but the history you already have stays. A pause with an end time is lifted by the
+ * server (within a minute), and the phone picks it up at its next check-in. Tracking follows
+ * through useTracking.
  */
 export function useSetSharing() {
   const { session } = useAuth();
@@ -37,15 +44,15 @@ export function useSetSharing() {
   const client = useQueryClient();
   const key = ['profile', userId];
   return useMutation({
-    mutationFn: async (enabled: boolean) => {
-      const { error } = await supabase.from('profiles').update({ sharing_enabled: enabled }).eq('id', userId!);
+    mutationFn: async (choice: SharingChoice) => {
+      const { error } = await supabase.from('profiles').update(toRow(choice)).eq('id', userId!);
       if (error) throw error;
     },
     // Flip the switch at once; a failure puts it back. Restored from memory, not by re-reading
     // the server, which fails too when offline and would leave the phone paused on its own.
-    onMutate: (enabled) => {
+    onMutate: (choice) => {
       const before = client.getQueryData<Profile>(key);
-      client.setQueryData<Profile>(key, (p) => p && { ...p, sharing_enabled: enabled });
+      client.setQueryData<Profile>(key, (p) => p && { ...p, ...toRow(choice) });
       return { before };
     },
     onError: (_error, _enabled, context) => {
@@ -53,6 +60,13 @@ export function useSetSharing() {
     },
     onSettled: () => client.invalidateQueries({ queryKey: key }),
   });
+}
+
+function toRow(choice: SharingChoice) {
+  return {
+    sharing_enabled: choice.enabled,
+    paused_until: choice.enabled ? null : (choice.until?.toISOString() ?? null),
+  };
 }
 
 /** Signing in again within the 7 days cancels a scheduled deletion, putting everything back. */
