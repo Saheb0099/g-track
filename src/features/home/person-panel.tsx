@@ -82,7 +82,8 @@ export function PersonPanel({
           <Text style={[typeStyles.title, { color: colors.text }]} numberOfLines={1}>
             {isYou ? 'You' : member.displayName.split(' ')[0]}
           </Text>
-          <Text style={[typeStyles.caption, { color: colors.muted, fontSize: 14 }]} numberOfLines={1}>
+          {/* Two lines: "Here since 10:12 AM · 10 m away" doesn't fit on one. */}
+          <Text style={[typeStyles.caption, { color: colors.muted, fontSize: 14 }]} numberOfLines={2}>
             {subtitle}
           </Text>
         </View>

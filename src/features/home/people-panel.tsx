@@ -36,21 +36,7 @@ export function PeoplePanel({ group, members, positions, now, meId, onSelect }: 
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <View style={styles.headerText}>
-          <Text style={[typeStyles.heading, { color: colors.text }]}>People</Text>
-          {status && (
-            <Pressable
-              onPress={() => router.push('/setup')}
-              accessibilityRole="button"
-              accessibilityHint="Opens location sharing setup"
-              style={styles.status}
-              hitSlop={8}>
-              <View style={[styles.dot, { backgroundColor: dot }]} />
-              <Text style={[typeStyles.caption, { color: colors.muted }]}>{status.label}</Text>
-              {status.tone !== 'ok' && <Ionicons name="chevron-forward" size={14} color={colors.muted} />}
-            </Pressable>
-          )}
-        </View>
+        <Text style={[typeStyles.heading, styles.headerText, { color: colors.text }]}>People</Text>
         {/* Invites, members, location timing and leaving all live in the group's settings. */}
         <Button
           title="Group settings"
@@ -60,6 +46,21 @@ export function PeoplePanel({ group, members, positions, now, meId, onSelect }: 
         />
       </View>
 
+      {/* Own line, under the heading and button, so it never wraps beside them. */}
+      {status && (
+        <Pressable
+          onPress={() => router.push('/setup')}
+          accessibilityRole="button"
+          accessibilityHint="Opens location sharing setup"
+          style={styles.status}
+          hitSlop={8}>
+          <View style={[styles.dot, { backgroundColor: dot }]} />
+          <Text style={[typeStyles.caption, { color: status.tone === 'attention' ? colors.text : colors.muted }]}>
+            {status.label}
+          </Text>
+          {status.tone !== 'ok' && <Ionicons name="chevron-forward" size={14} color={colors.muted} />}
+        </Pressable>
+      )}
       {/* Full width: these can run to two lines. */}
       {update && (
         <Text style={[typeStyles.caption, { color: colors.accentText }]}>
@@ -102,7 +103,7 @@ const styles = StyleSheet.create({
   container: { gap: 14 },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
   headerText: { flex: 1, gap: 2 },
-  status: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  status: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: -6 },
   dot: { width: 8, height: 8, borderRadius: 4 },
   hint: { textAlign: 'center', lineHeight: 19 },
 });

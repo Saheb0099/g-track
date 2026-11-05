@@ -3,16 +3,29 @@ import { useQueryClient } from '@tanstack/react-query';
 import Constants from 'expo-constants';
 import * as IntentLauncher from 'expo-intent-launcher';
 import * as Location from 'expo-location';
-import { useState, type ReactNode } from 'react';
-import { Alert, Linking, PermissionsAndroid, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useState, type ReactNode } from 'react';
+import {
+  Alert,
+  AppState,
+  Linking,
+  PermissionsAndroid,
+  ScrollView,
+  StyleSheet,
+  Text,
+  ToastAndroid,
+  View,
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Button } from '@/components/button';
-import { openStepPage, phoneSteps, type PhoneStep } from '@/features/location/phone-steps';
+import { openAppSettings, openStepPage, phoneSteps, type PhoneStep } from '@/features/location/phone-steps';
 import { useSetupChecks, useTracking } from '@/features/location/use-tracking';
 import { radius, type as typeStyles, useColors } from '@/lib/theme';
 
 const PACKAGE = Constants.expoConfig?.android?.package ?? 'com.sahebbeshra.gtrack';
+// Shown over G Track's app settings, so it's clear where to go there.
+const LOCATION_HINT = 'Open Permissions, then Location.';
+const BATTERY_HINT = 'Open Battery and choose Unrestricted.';
 // Phone-maker steps the app can't check are ticked by hand, and remembered on this phone.
 const doneKey = (id: string) => `gtrack.setup.done.${id}`;
 
@@ -42,12 +55,21 @@ export default function LocationSetup() {
   // Re-check everything; the user may have changed settings in another screen.
   const recheck = () => queryClient.invalidateQueries({ queryKey: ['tracking'] });
 
+  // Back from a settings page (or anywhere else): re-check every setting at once, so each step's
+  // tick matches what was just changed. Some checks otherwise wait up to a minute to refresh.
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') void queryClient.invalidateQueries({ queryKey: ['tracking'] });
+    });
+    return () => sub.remove();
+  }, [queryClient]);
+
   async function allowLocation() {
     const result = await Location.requestForegroundPermissionsAsync();
     if (!result.granted && !result.canAskAgain) {
       Alert.alert('Location is blocked', 'Open app settings → Permissions → Location → Allow.', [
         { text: 'Cancel', style: 'cancel' },
-        { text: 'Open settings', onPress: () => Linking.openSettings() },
+        { text: 'Open settings', onPress: () => openAppSettings(LOCATION_HINT) },
       ]);
     }
     recheck();
@@ -84,17 +106,32 @@ export default function LocationSetup() {
     recheck();
   }
 
-  function markDone(id: string) {
+  function markDone(id: string, done = true) {
     try {
-      localStorage.setItem(doneKey(id), 'yes');
+      if (done) localStorage.setItem(doneKey(id), 'yes');
+      else localStorage.removeItem(doneKey(id));
     } catch {
       // Not remembered; harmless.
     }
-    setManualDone((done) => ({ ...done, [id]: true }));
+    setManualDone((all) => ({ ...all, [id]: done }));
   }
 
+  // Permissions can only be turned off by the person, in Android's settings: these open the page.
+  const changeLocation = () => openAppSettings(LOCATION_HINT).then(recheck);
+  const changeBattery = () => openAppSettings(BATTERY_HINT).then(recheck);
+  async function openNotificationSettings() {
+    ToastAndroid.show('Use "Allow notifications" to turn them on or off.', ToastAndroid.LONG);
+    await IntentLauncher.startActivityAsync(IntentLauncher.ActivityAction.APP_NOTIFICATION_SETTINGS, {
+      extra: { 'android.provider.extra.APP_PACKAGE': PACKAGE },
+    }).catch(() => Linking.openSettings());
+    recheck();
+  }
+  const change = (onPress: () => unknown) => (
+    <Button title="Change" variant="secondary" size="small" onPress={onPress} />
+  );
+
   async function openPage(step: PhoneStep) {
-    await openStepPage(step.open ?? []);
+    await openStepPage(step);
     recheck();
   }
 
@@ -122,12 +159,14 @@ export default function LocationSetup() {
         title="1. Location access"
         body="Lets G Track read your location."
         action={<Button title="Allow" onPress={allowLocation} />}
+        doneAction={change(changeLocation)}
       />
       <Step
         done={!!readiness?.background}
         title="2. Allow all the time"
         body="Needed to share while the app is closed, about every 5 minutes."
         action={<Button title="Open settings" onPress={allowAllTheTime} disabled={!readiness?.foreground} />}
+        doneAction={change(changeLocation)}
       />
       {readiness && !readiness.servicesOn && (
         <Step
@@ -140,7 +179,8 @@ export default function LocationSetup() {
         done={!!checks.data?.notifications}
         title="3. Notifications"
         body={'Shows the "G Track is sharing your location" notification, so you always know when sharing is on.'}
-        action={<Button title="Allow" variant="secondary" onPress={allowNotifications} />}
+        action={<Button title="Allow" onPress={allowNotifications} />}
+        doneAction={change(openNotificationSettings)}
       />
       {/* One Android setting with three choices (Unrestricted, Optimized, Restricted): done when
           it's Unrestricted, which also rules out Restricted. */}
@@ -151,11 +191,12 @@ export default function LocationSetup() {
         action={
           checks.data?.backgroundRestricted ? (
             // Android's "don't optimize" prompt can't undo Restricted; that's only in app info → Battery.
-            <Button title="App settings" variant="secondary" onPress={() => Linking.openSettings().then(recheck)} />
+            <Button title="App settings" onPress={changeBattery} />
           ) : (
-            <Button title="Allow" variant="secondary" onPress={stopBatteryOptimization} />
+            <Button title="Allow" onPress={stopBatteryOptimization} />
           )
         }
+        doneAction={change(changeBattery)}
       />
 
       {phone.steps.length > 0 && (
@@ -175,11 +216,31 @@ export default function LocationSetup() {
             body={step.body}
             action={
               <View style={styles.row}>
-                {step.open !== null && (
-                  <Button title="Open" variant="secondary" onPress={() => openPage(step)} style={styles.flex} />
-                )}
+                {step.open !== null && <Button title="Open" onPress={() => openPage(step)} style={styles.flex} />}
                 {auto === undefined && (
                   <Button title="Done" variant="secondary" onPress={() => markDone(step.id)} style={styles.flex} />
+                )}
+              </View>
+            }
+            doneAction={
+              <View style={styles.row}>
+                {step.open !== null && (
+                  <Button
+                    title="Change"
+                    variant="secondary"
+                    size="small"
+                    onPress={() => openPage(step)}
+                    style={styles.flex}
+                  />
+                )}
+                {auto === undefined && (
+                  <Button
+                    title="Undo"
+                    variant="secondary"
+                    size="small"
+                    onPress={() => markDone(step.id, false)}
+                    style={styles.flex}
+                  />
                 )}
               </View>
             }
@@ -202,17 +263,22 @@ export default function LocationSetup() {
   );
 }
 
+// Buttons: blue (primary) for the action that does a step (Allow, Open), grey for the rest
+// (Done, Change, Undo), on every step.
 function Step({
   done,
   title,
   body,
   action,
+  doneAction,
   footer,
 }: {
   done: boolean;
   title: string;
   body: string;
   action?: ReactNode;
+  /** Shown once done, so a setting is as easy to change back as it was to set. */
+  doneAction?: ReactNode;
   footer?: ReactNode;
 }) {
   const colors = useColors();
@@ -227,7 +293,7 @@ function Step({
         <Text style={[typeStyles.bodyStrong, styles.flex, { color: colors.text, fontSize: 17 }]}>{title}</Text>
       </View>
       <Text style={[typeStyles.body, { color: colors.muted }]}>{body}</Text>
-      {!done && action}
+      {done ? doneAction : action}
       {footer}
     </View>
   );

@@ -4,6 +4,7 @@ import { StyleSheet, Text, View } from 'react-native';
 
 import { Avatar, avatarColor } from '@/components/avatar';
 import type { Member } from '@/features/groups/api';
+import { distanceMeters } from '@/features/location/rules';
 import type { LivePosition } from '@/features/map/api';
 import { boundsAround, circlePolygon } from '@/features/map/geo';
 import { useMapStyle } from '@/features/map/styles';
@@ -16,6 +17,23 @@ import { fonts, useColors } from '@/lib/theme';
 export function staleAfterMs(saveEveryMin: number) {
   return Math.max(20, 3 * saveEveryMin) * 60_000;
 }
+/** People closer than this share one pin, so their pins and names don't pile up on each other. */
+const SHARED_PIN_M = 60;
+/** A shared pin shows this many faces, then "+N". */
+const MAX_FACES = 3;
+
+/** Groups positions that are close together (you first in yours), for shared pins. */
+function groupClose(positions: LivePosition[], meId?: string): LivePosition[][] {
+  const groups: LivePosition[][] = [];
+  const asFix = (p: LivePosition) => ({ lat: p.lat, lng: p.lng, time: 0 });
+  for (const p of positions) {
+    const near = groups.find((g) => distanceMeters(asFix(g[0]), asFix(p)) <= SHARED_PIN_M);
+    if (near) near.push(p);
+    else groups.push([p]);
+  }
+  return groups.map((g) => [...g].sort((a, b) => Number(b.userId === meId) - Number(a.userId === meId)));
+}
+
 /** Accuracy rings are only worth drawing when the fix is rough. */
 const MIN_RING_M = 25;
 
@@ -48,6 +66,9 @@ export const GroupMap = forwardRef<GroupMapHandle, Props>(function GroupMap(
   const mapStyle = useMapStyle();
   const camera = useRef<CameraRef>(null);
   const framedFor = useRef<string | null>(null);
+  // A tap on a pin also reaches the map under it, whose tap means "deselect". Remembered here, so
+  // the map can tell a tap on empty map from one that landed on a pin, whichever arrives first.
+  const pinTappedAt = useRef(0);
   // The camera ignores moves made before the map has loaded its style.
   const [loaded, setLoaded] = useState(false);
 
@@ -112,7 +133,11 @@ export const GroupMap = forwardRef<GroupMapHandle, Props>(function GroupMap(
       // Texture rendering lets the frosted panels blur the map behind them.
       androidView="texture"
       onDidFinishLoadingMap={() => setLoaded(true)}
-      onPress={() => onSelect(null)}>
+      onPress={() =>
+        setTimeout(() => {
+          if (Date.now() - pinTappedAt.current > 400) onSelect(null);
+        }, 80)
+      }>
       <Camera ref={camera} initialViewState={{ center: [0, 20], zoom: 1 }} />
 
       <GeoJSONSource id="accuracy" data={rings}>
@@ -123,39 +148,75 @@ export const GroupMap = forwardRef<GroupMapHandle, Props>(function GroupMap(
         />
       </GeoJSONSource>
 
-      {positions.map((p) => {
-        const member = people.get(p.userId);
-        const name = member?.displayName ?? '?';
-        const stale = now - Date.parse(p.recordedAt) > staleMs;
-        const selected = p.userId === selectedId;
-        const label = p.userId === meId ? 'You' : name.split(' ')[0];
-        const size = selected ? 54 : 46;
+      {groupClose(positions, meId).map((group) => {
+        const first = (p: LivePosition) =>
+          p.userId === meId ? 'You' : (people.get(p.userId)?.displayName ?? '?').split(' ')[0];
+        const names = group.map(first);
+        const label = names.length <= 2 ? names.join(', ') : `${names[0]} +${names.length - 1}`;
+        const selected = group.some((p) => p.userId === selectedId);
+        const stale = group.every((p) => now - Date.parse(p.recordedAt) > staleMs);
+        // Tapping a shared pin opens a friend's card rather than your own.
+        const target = group.find((p) => p.userId !== meId) ?? group[0];
+        const lat = group.reduce((sum, p) => sum + p.lat, 0) / group.length;
+        const lng = group.reduce((sum, p) => sum + p.lng, 0) / group.length;
+        const faces = group.slice(0, group.length > MAX_FACES ? MAX_FACES - 1 : MAX_FACES);
+        const extra = group.length - faces.length;
+        const size = group.length > 1 ? 40 : selected ? 54 : 46;
+        const ring = selected ? colors.accent : '#FFFFFF';
         return (
           // A pin: the marker's bottom edge, the tip of the pointer, sits exactly on the location.
           <Marker
-            key={p.userId}
-            id={p.userId}
-            lngLat={[p.lng, p.lat]}
+            key={group.map((p) => p.userId).join(',')}
+            id={group.map((p) => p.userId).join(',')}
+            lngLat={[lng, lat]}
             anchor="bottom"
-            onPress={() => onSelect(p.userId)}>
-            <View style={[styles.marker, { opacity: stale ? 0.55 : 1 }]} accessibilityLabel={`${name} on the map`}>
+            onPress={() => {
+              pinTappedAt.current = Date.now();
+              onSelect(target.userId);
+            }}>
+            <View
+              style={[styles.marker, { opacity: stale ? 0.55 : 1 }]}
+              accessibilityLabel={`${names.join(', ')} on the map`}>
               <View style={[styles.label, { backgroundColor: colors.glass, borderColor: colors.glassBorder }]}>
                 <Text style={[styles.labelText, { color: colors.text }]} numberOfLines={1}>
                   {label}
                 </Text>
               </View>
-              <View
-                style={[
-                  styles.pin,
-                  {
-                    borderRadius: size / 2 + 3,
-                    borderColor: selected ? colors.accent : '#FFFFFF',
-                    backgroundColor: avatarColor(name),
-                  },
-                ]}>
-                <Avatar name={name} uri={member?.avatarUrl} size={size} />
+              <View style={styles.faces}>
+                {faces.map((p, i) => {
+                  const member = people.get(p.userId);
+                  const name = member?.displayName ?? '?';
+                  return (
+                    <View
+                      key={p.userId}
+                      style={[
+                        styles.pin,
+                        i > 0 && styles.overlap,
+                        { borderRadius: size / 2 + 3, borderColor: ring, backgroundColor: avatarColor(name) },
+                      ]}>
+                      <Avatar name={name} uri={member?.avatarUrl} size={size} />
+                    </View>
+                  );
+                })}
+                {extra > 0 && (
+                  <View
+                    style={[
+                      styles.pin,
+                      styles.overlap,
+                      styles.more,
+                      {
+                        width: size + 6,
+                        height: size + 6,
+                        borderRadius: size / 2 + 3,
+                        borderColor: ring,
+                        backgroundColor: colors.strong,
+                      },
+                    ]}>
+                    <Text style={[styles.labelText, { color: colors.onStrong }]}>+{extra}</Text>
+                  </View>
+                )}
               </View>
-              <View style={[styles.pointer, { borderTopColor: selected ? colors.accent : '#FFFFFF' }]} />
+              <View style={[styles.pointer, { borderTopColor: ring }]} />
             </View>
           </Marker>
         );
@@ -174,6 +235,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   labelText: { fontFamily: fonts.bold, fontSize: 12 },
+  faces: { flexDirection: 'row' },
+  overlap: { marginLeft: -14 },
+  more: { alignItems: 'center', justifyContent: 'center' },
   pin: {
     borderWidth: 3,
     shadowColor: '#0E1116',

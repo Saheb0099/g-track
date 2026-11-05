@@ -1,7 +1,7 @@
 import Constants from 'expo-constants';
 import * as Device from 'expo-device';
 import * as IntentLauncher from 'expo-intent-launcher';
-import { Linking } from 'react-native';
+import { Linking, ToastAndroid } from 'react-native';
 
 import GtrackAlarm from '../../../modules/gtrack-alarm';
 
@@ -23,6 +23,13 @@ export type PhoneStep = {
   body: string;
   /** Pages to try in order. Empty: open G Track's app settings. Null: nothing to open. */
   open: Page[] | null;
+  /**
+   * Shown over the settings page as it opens, so it's clear what to change there (apps can't
+   * highlight anything on another app's screen). `appInfoHint` is used when only G Track's app
+   * settings could be opened instead.
+   */
+  hint?: string;
+  appInfoHint?: string;
   /** Reads the setting: true when done, false when not, null when this phone won't say. */
   check?: () => boolean | null;
 };
@@ -45,6 +52,7 @@ const BRANDS: { match: RegExp; steps: PhoneSteps }[] = [
       steps: [
         {
           id: 'vivo-sleep',
+          hint: 'Turn off the top switch: "Sleep standby optimization".',
           title: 'Turn off Sleep standby optimization',
           body: 'Vivo freezes apps while it thinks you are asleep, which stops sharing overnight. Turn the top switch off.',
           open: [
@@ -60,6 +68,7 @@ const BRANDS: { match: RegExp; steps: PhoneSteps }[] = [
         },
         {
           id: 'vivo-background',
+          hint: 'Find G Track in the list and choose "Allow background power usage".',
           title: 'Background power control: allow',
           body: 'Find G Track in the list and choose "Allow background power usage".',
           open: [
@@ -69,8 +78,10 @@ const BRANDS: { match: RegExp; steps: PhoneSteps }[] = [
         {
           id: 'vivo-autostart',
           title: 'Turn on Autostart',
-          body: "Vivo doesn't let apps open this page. Go to Settings → Apps → Autostart and turn on G Track.",
-          open: [],
+          // Vivo locks this page so apps can't open it, and it moves between versions, so no button:
+          // searching Settings finds it everywhere.
+          body: 'Open the Settings app, search for "Autostart" and turn on G Track.',
+          open: null,
         },
         lockInRecents('Open Recent apps and pull down on G Track.'),
       ],
@@ -84,6 +95,8 @@ const BRANDS: { match: RegExp; steps: PhoneSteps }[] = [
       steps: [
         {
           id: 'xiaomi-autostart',
+          hint: 'Turn on the switch next to G Track.',
+          appInfoHint: 'Find Autostart and turn it on.',
           title: 'Turn on Autostart',
           body: 'Find G Track and turn it on.',
           open: [
@@ -95,6 +108,8 @@ const BRANDS: { match: RegExp; steps: PhoneSteps }[] = [
         },
         {
           id: 'xiaomi-battery',
+          hint: 'Choose "No restrictions".',
+          appInfoHint: 'Open Battery saver and choose "No restrictions".',
           title: 'Battery saver: No restrictions',
           body: 'Choose "No restrictions" for G Track.',
           open: [
@@ -123,6 +138,8 @@ const BRANDS: { match: RegExp; steps: PhoneSteps }[] = [
       steps: [
         {
           id: 'oppo-autolaunch',
+          hint: 'Turn on the switch next to G Track.',
+          appInfoHint: 'Find "Auto launch" and turn it on.',
           title: 'Allow auto launch',
           body: 'Find G Track and turn on auto launch.',
           open: [
@@ -143,6 +160,7 @@ const BRANDS: { match: RegExp; steps: PhoneSteps }[] = [
         },
         {
           id: 'oppo-background',
+          appInfoHint: 'Open Battery and turn on "Allow background activity".',
           title: 'Allow background activity',
           body: 'In G Track\'s app info, open Battery and turn on "Allow background activity".',
           open: [],
@@ -159,6 +177,8 @@ const BRANDS: { match: RegExp; steps: PhoneSteps }[] = [
       steps: [
         {
           id: 'samsung-never-sleeping',
+          hint: 'Open Background usage limits, then Never sleeping apps, and add G Track.',
+          appInfoHint: 'Open Battery and choose Unrestricted.',
           title: 'Add G Track to Never sleeping apps',
           body: "Open Background usage limits → Never sleeping apps and add G Track. Make sure it isn't under Sleeping or Deep sleeping apps.",
           open: [
@@ -177,6 +197,8 @@ const BRANDS: { match: RegExp; steps: PhoneSteps }[] = [
       steps: [
         {
           id: 'huawei-launch',
+          hint: 'Find G Track, choose "Manage manually" and turn on all three.',
+          appInfoHint: 'Open Battery and allow G Track to run in the background.',
           title: 'App launch: manage manually',
           body: 'Find G Track, switch it to "Manage manually" and turn on all three options.',
           open: [
@@ -203,21 +225,47 @@ export function phoneSteps(): PhoneSteps {
   return BRANDS.find((b) => b.match.test(maker))?.steps ?? OTHER;
 }
 
-/** Opens a step's page: the first address this phone has, else G Track's app settings. */
-export async function openStepPage(pages: Page[]) {
-  for (const page of pages) {
+/** A short note over whatever screen is showing, for a few seconds. */
+function showHint(text: string | undefined) {
+  if (text) ToastAndroid.show(text, ToastAndroid.LONG);
+}
+
+const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+
+/** G Track's app settings, with a note on what to change there. */
+export async function openAppSettings(hint?: string) {
+  showHint(hint);
+  await Linking.openSettings();
+}
+
+/**
+ * Opens a step's page (the first address this phone has, else G Track's app settings) with the
+ * step's hint over it. The hint goes up as the page is asked for: shown any later, once G Track
+ * is behind the settings page, Android delays it until after you've moved on.
+ */
+export async function openStepPage(step: Pick<PhoneStep, 'open' | 'hint' | 'appInfoHint'>) {
+  let hinted = false;
+  for (const page of step.open ?? []) {
     // An empty entry stands for G Track's own app settings.
     if (!page.action && !page.className) break;
-    try {
-      await IntentLauncher.startActivityAsync(page.action ?? 'android.intent.action.MAIN', {
-        packageName: page.packageName,
-        className: page.className,
-        extra: page.extra,
-      });
-      return;
-    } catch {
-      // Not on this phone (or apps may not open it): try the next address.
-    }
+    if (!hinted) showHint(step.hint);
+    hinted = true;
+    const launch = IntentLauncher.startActivityAsync(page.action ?? 'android.intent.action.MAIN', {
+      packageName: page.packageName,
+      className: page.className,
+      extra: page.extra,
+    });
+    const failed = await Promise.race([
+      launch.then(
+        () => false,
+        () => true,
+      ),
+      wait(400).then(() => false),
+    ]);
+    // Not on this phone (or apps may not open it): try the next address.
+    if (failed) continue;
+    await launch.catch(() => {});
+    return;
   }
-  await Linking.openSettings();
+  await openAppSettings(hinted ? undefined : (step.appInfoHint ?? step.hint));
 }
