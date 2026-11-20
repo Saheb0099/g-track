@@ -18,6 +18,7 @@ import {
   saveDueMs,
   scheduleFor,
   shouldSave,
+  trustFor,
   type Fix,
   type Schedule,
   type Verdict,
@@ -206,9 +207,10 @@ async function recordReadingNow(
   };
 
   const [lastGood, held] = await Promise.all([getState<Fix>('last_good'), getState<Fix>('held_jump')]);
-  const { verdict, reason, trip, keepHeld } = judgeFix(lastGood, held, fix);
+  const schedule = await getSchedule();
+  const { verdict, reason, trip, keepHeld } = judgeFix(lastGood, held, fix, schedule.checkEveryMs);
   if (verdict !== 'accept') {
-    if (verdict === 'hold') await setState('held_jump', nextHeld(held, fix));
+    if (verdict === 'hold') await setState('held_jump', nextHeld(held, fix, schedule.checkEveryMs));
     await logEvent(`${verdict} fix: ${reason}`);
     return { saved: false, verdict };
   }
@@ -229,7 +231,7 @@ async function recordReadingNow(
   // A forced save (the app was just opened) still skips a reading within a minute of the last one.
   const keep = options.force
     ? !last || fix.time - last.time >= (options.minGapMs ?? 60_000) || clockMovedBack(last, fix)
-    : shouldSave(last, fix, await getSchedule(), lastGood);
+    : shouldSave(last, fix, schedule, lastGood);
   if (!keep) return { saved: false, verdict };
 
   const battery = options.battery !== undefined ? options.battery : await batteryPercent();
@@ -298,7 +300,7 @@ export async function recordCurrentPosition(options: { stillHere?: boolean; minG
   // "now" could then show someone still at the station, so older fixes aren't re-stamped and the
   // last good one isn't repeated; a short "last seen" gap is better than a wrong place.
   const held = await getState<Fix>('held_jump');
-  const waiting = !!held && Date.now() - held.time < HELD_FRESH_MS;
+  const waiting = !!held && Date.now() - held.time < trustFor(HELD_FRESH_MS, (await getSchedule()).checkEveryMs);
   const restamp = (timestamp: number) => !!options.stillHere && !(waiting && timestamp <= held.time);
 
   for (const attempt of FRESH_FIX_ATTEMPTS) {

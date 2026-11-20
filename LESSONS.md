@@ -66,10 +66,21 @@ between towers. It wasn't: the group's admin had set "save every 1 minute", and 
 - Read it with `adb exec-out run-as com.sahebbeshra.gtrack cat files/SQLite/tracker.db` (copy the
   `-wal` file too, or recent changes are missing).
 
+## 6. Fixed timers that assumed readings every minute (fixed, Nov 2026)
+
+**Bug:** trust windows were fixed lengths (a trip trusted for 10 minutes, a good reading for 30)
+chosen when readings came every minute. A group admin can set checks every 1 to 30 minutes; at 30,
+readings arrive just over 30 minutes apart, every window had expired by the next reading, and
+indoor readings were dropped.
+
+**Rule to keep:** any time limit between readings must be checked against the slowest setting
+(30 minutes, plus Android's delays). Scale it with the interval (`trustFor`), and test with
+readings every 15 and 30 minutes, not only every minute.
+
 ## Before changing location rules
 
 1. Add a test to `scripts/test-rules.mjs` that fails on the current code for the problem you're
    fixing, and check it really fails.
 2. Make sure the old tests still pass: trains and buses with rough readings, glitches, clock
-   changes, indoors with only ±200 m readings.
+   changes, indoors with only ±200 m readings, and readings every 15 and 30 minutes.
 3. Try it on a phone and read its log before calling it done.

@@ -37,6 +37,7 @@ A free location-sharing app for a circle of friends. Android first.
 
 - [x] Indoors after a gap, rough Wi-Fi/cell fixes that agree are now saved (before, nothing was until a GPS fix)
 - [x] Indoors, a single hop between mobile towers isn't saved as a move
+- [x] Groups checking every 15–30 minutes: trust timers last at least 2½ checks, so indoor and train readings aren't dropped
 
 ### Security
 
@@ -65,6 +66,9 @@ These use the phone wake-ups (Firebase Cloud Messaging) that Get location now se
 
 - [ ] **Arrival alerts:** save places like Home or College and get "your friend reached Home"
 - [ ] **SOS button:** one tap sends your location and an alert to the whole group
+- [ ] **Motion-based tracking:** use the phone's motion sensors (still, walking, in a vehicle) and a
+      "wake me when I leave" circle to take readings often while moving and rarely while still,
+      as the big location apps do. Better accuracy on trips and better battery than fixed timing
 
 ## Later
 

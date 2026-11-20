@@ -15,13 +15,13 @@ function east(from, km) {
 }
 
 /** Runs fixes through the rules the way the tracker does; returns the believed ones. */
-function track(fixes) {
+function track(fixes, checkEveryMs = MIN) {
   let lastGood = null;
   let held = null;
   const believed = [];
   for (const fix of fixes) {
-    const { verdict, trip, keepHeld } = judgeFix(lastGood, held, fix);
-    if (verdict === 'hold') held = nextHeld(held, fix);
+    const { verdict, trip, keepHeld } = judgeFix(lastGood, held, fix, checkEveryMs);
+    if (verdict === 'hold') held = nextHeld(held, fix, checkEveryMs);
     if (verdict !== 'accept') continue;
     if (keepHeld && held) believed.push(held);
     believed.push(fix);
@@ -38,8 +38,8 @@ function saves(fixes, schedule = { checkEveryMs: MIN, saveEveryMs: 5 * MIN }) {
   let lastSaved = null;
   const saved = [];
   for (const raw of fixes) {
-    const { verdict, trip } = judgeFix(lastGood, held, raw);
-    if (verdict === 'hold') held = nextHeld(held, raw);
+    const { verdict, trip } = judgeFix(lastGood, held, raw, schedule.checkEveryMs);
+    if (verdict === 'hold') held = nextHeld(held, raw, schedule.checkEveryMs);
     if (verdict !== 'accept') continue;
     const fix = raw;
     const previous = lastGood;
@@ -214,6 +214,42 @@ for (const [name, kmh, acc] of [
   // Precise GPS on the move saves as before: every 250 m.
   const saved = saves(fromHome(trip(30, 15, 20))).length - 1;
   check('Driving with GPS saves as before', saved >= 19, `${saved} points in 20 min`);
+}
+
+// Groups that check less often (the admin picks 1 to 30 minutes): readings arrive that far apart,
+// give or take a minute, and the rules must not expire between two of them.
+/** Times every `every` minutes for `hours`, a little early or late as Android delivers them. */
+function everyFew(every, hours) {
+  const times = [];
+  for (let i = 0, t = 0; t <= hours * 60; i++, t += every + [0.7, 1, -0.5][i % 3]) times.push(t * MIN);
+  return times;
+}
+for (const every of [15, 30]) {
+  const times = everyFew(every, 3);
+  const train = times.map((time, i) =>
+    i === 0 ? { ...HOME, time, accuracy: 15 } : { ...east(HOME, time / MIN), time, accuracy: 150 },
+  );
+  const kept = track(train, every * MIN).length;
+  check(`Train with ±150 m readings every ${every} min`, kept >= train.length - 1, `${kept} of ${train.length} kept`);
+
+  const indoors = times.map((time) => ({ ...HOME, time, accuracy: 200 }));
+  const believed = track(indoors, every * MIN).length;
+  check(
+    `Indoors, ±200 m readings every ${every} min`,
+    believed >= indoors.length - 1,
+    `${believed} of ${indoors.length} kept`,
+  );
+}
+
+{
+  // Longer trust must not make glitches easier to believe: hopping between two wrong places 3 km
+  // either side, with readings every 30 minutes.
+  const times = everyFew(30, 4);
+  const fixes = times.map((time, i) =>
+    i === 0 ? { ...HOME, time, accuracy: 15 } : { ...east(HOME, i % 2 ? 3 : -3), time, accuracy: 200 },
+  );
+  const far = track(fixes, 30 * MIN).filter((f) => distanceMeters(HOME, f) > 1000).length;
+  check('Glitch hopping between two wrong places, readings every 30 min', far === 0, `${far} far fixes kept`);
 }
 
 // Known limit, reported rather than checked: a glitch that drifts steadily away looks like a trip.

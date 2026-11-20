@@ -74,6 +74,18 @@ const TRIP_STEP_MS = 30_000;
 /** Once on a trip, rough jumps this soon after the last good fix are believed straight away. */
 const TRIP_TRUST_MS = 10 * 60_000;
 
+/**
+ * The trust windows above assume readings about a minute apart. A group can check as rarely as
+ * every 30 minutes, and a window must never run out between two normal readings, so each lasts
+ * at least this many checks.
+ */
+const CHECKS_OF_TRUST = 2.5;
+
+/** How long a trust window lasts at this phone's check interval: its usual length, or longer. */
+export function trustFor(windowMs: number, checkEveryMs: number): number {
+  return Math.max(windowMs, CHECKS_OF_TRUST * checkEveryMs);
+}
+
 export type Verdict = 'accept' | 'reject' | 'hold';
 
 /** Readings can arrive a little out of order; further back than this, the clock was set back. */
@@ -110,8 +122,10 @@ function samePlace(a: Fix, b: Fix): boolean {
  * it, so the time since it grows and a later fix can confirm it. Replacing it with every new fix
  * (they arrive each minute) would keep it forever under the 2 minutes a confirmation needs.
  */
-export function nextHeld(held: Fix | null, next: Fix): Fix {
-  if (!held || clockMovedBack(held, next) || next.time - held.time > GOOD_FIX_TRUST_MS) return next;
+export function nextHeld(held: Fix | null, next: Fix, checkEveryMs = 60_000): Fix {
+  if (!held || clockMovedBack(held, next) || next.time - held.time > trustFor(GOOD_FIX_TRUST_MS, checkEveryMs)) {
+    return next;
+  }
   return samePlace(held, next) ? held : next;
 }
 
@@ -132,7 +146,9 @@ function movesOn(lastGood: Fix | null, held: Fix | null, next: Fix, acc: number)
  * - hold: a big jump from a shaky fix; remember it, and accept only if a later fix agrees.
  * - reject: rough, or physically impossible.
  */
-export function judgeFix(lastGoodFix: Fix | null, heldFix: Fix | null, next: Fix): Judgement {
+export function judgeFix(lastGoodFix: Fix | null, heldFix: Fix | null, next: Fix, checkEveryMs = 60_000): Judgement {
+  const goodFixTrust = trustFor(GOOD_FIX_TRUST_MS, checkEveryMs);
+  const tripTrust = trustFor(TRIP_TRUST_MS, checkEveryMs);
   const lastGood = clockMovedBack(lastGoodFix, next) ? null : lastGoodFix;
   const held = clockMovedBack(heldFix, next) ? null : heldFix;
   const acc = next.accuracy ?? MAX_ACCURACY_M;
@@ -147,7 +163,7 @@ export function judgeFix(lastGoodFix: Fix | null, heldFix: Fix | null, next: Fix
     distanceMeters(held, next) <= (held.accuracy ?? 0) + acc + 200;
 
   // Nothing recent to compare with (new install, sign-in, a long gap): start from a precise fix.
-  if (!lastGood || next.time - lastGood.time > GOOD_FIX_TRUST_MS) {
+  if (!lastGood || next.time - lastGood.time > goodFixTrust) {
     if (acc <= PRECISE_M) return { verdict: 'accept', reason: 'precise first fix' };
     if (confirmsHeld) return { verdict: 'accept', reason: 'first fix confirmed by a second fix' };
     // Indoors, rough fixes may be all there is; minutes apart on the same spot, that's where it is.
@@ -168,7 +184,7 @@ export function judgeFix(lastGoodFix: Fix | null, heldFix: Fix | null, next: Fix
   }
 
   if (dist > BIG_JUMP_M && acc > PRECISE_M) {
-    if (lastGood.trip && next.time - lastGood.time <= TRIP_TRUST_MS) {
+    if (lastGood.trip && next.time - lastGood.time <= tripTrust) {
       return { verdict: 'accept', reason: 'trip continues', trip: true };
     }
     if (confirmsHeld) return { verdict: 'accept', reason: 'jump confirmed by a second fix' };
