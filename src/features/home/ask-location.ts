@@ -68,14 +68,20 @@ export function useAskForLocation(member: Member, position: LivePosition | undef
 
 /** The function's own error key ("asked_recently") from its reply, if it sent one. */
 async function reasonFor(error: unknown): Promise<unknown> {
-  const reply = (error as { context?: unknown }).context;
-  if (reply instanceof Response) {
+  // Checked by shape, not `instanceof Response`: React Native's fetch Response isn't always the
+  // global one, and the check then fails silently, leaving only "non-2xx status code".
+  const reply = (error as { context?: { status?: number; text?: () => Promise<string> } }).context;
+  if (typeof reply?.text !== 'function') return error;
+  try {
+    const text = await reply.text();
     try {
-      const body = (await reply.json()) as { error?: unknown };
+      const body = JSON.parse(text) as { error?: unknown };
       if (typeof body.error === 'string') return body.error;
     } catch {
-      // Not JSON: fall back to the error itself.
+      // Not JSON (a crash page or gateway error): show what came back.
     }
+    return `Server error ${reply.status ?? ''}: ${text.slice(0, 120)}`;
+  } catch {
+    return error;
   }
-  return error;
 }
