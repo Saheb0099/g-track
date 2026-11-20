@@ -65,6 +65,9 @@ between towers. It wasn't: the group's admin had set "save every 1 minute", and 
   reasons logged) and the timing the phone follows (`schedule` in the tracker state).
 - Read it with `adb exec-out run-as com.sahebbeshra.gtrack cat files/SQLite/tracker.db` (copy the
   `-wal` file too, or recent changes are missing).
+- Check the screen with screenshots, not `uiautomator dump`: on a screen that changes every second
+  (a countdown) the dump quietly fails and the old file is read again. That once made a working
+  countdown look broken.
 
 ## 6. Fixed timers that assumed readings every minute (fixed, Nov 2026)
 

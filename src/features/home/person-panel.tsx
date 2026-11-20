@@ -9,7 +9,7 @@ import { StatTile } from '@/components/card';
 import type { Member } from '@/features/groups/api';
 import { statusLine } from '@/features/groups/member-row';
 import { useDayHistory, useRecentDays } from '@/features/history/api';
-import { useAskForLocation } from '@/features/home/ask-location';
+import { countdown, useAskForLocation } from '@/features/home/ask-location';
 import { buildTimeline, formatDistance, travelledM } from '@/features/history/timeline';
 import { distanceMeters } from '@/features/location/rules';
 import type { LivePosition } from '@/features/map/api';
@@ -54,6 +54,8 @@ export function PersonPanel({
   const canAsk = !isYou && member.sharingEnabled && !member.deletedAt;
   const asking = ask.phase === 'asking';
   const answered = ask.phase === 'done';
+  // After asking, the button counts down to when they can be asked again (the server's 2 minutes).
+  const waiting = !asking && !answered && ask.waitMs > 0;
   const today = useRecentDays()[0];
   const history = useDayHistory(member.userId, today);
 
@@ -131,15 +133,27 @@ export function PersonPanel({
       {canAsk && (
         <View style={styles.ask}>
           <Button
-            title={asking ? 'Asking…' : answered ? 'Got a fresh location' : 'Get location now'}
+            title={
+              asking
+                ? 'Asking…'
+                : answered
+                  ? 'Got a fresh location'
+                  : waiting
+                    ? `Ask again in ${countdown(ask.waitMs)}`
+                    : 'Get location now'
+            }
             variant="secondary"
-            disabled={asking || answered}
+            disabled={asking || answered || waiting}
             onPress={ask.ask}
             icon={
               asking ? (
                 <ActivityIndicator size="small" color={colors.text} />
               ) : (
-                <Ionicons name={answered ? 'checkmark-circle' : 'refresh'} size={18} color={colors.text} />
+                <Ionicons
+                  name={answered ? 'checkmark-circle' : waiting ? 'time-outline' : 'refresh'}
+                  size={18}
+                  color={colors.text}
+                />
               )
             }
           />

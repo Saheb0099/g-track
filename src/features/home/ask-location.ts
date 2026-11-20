@@ -12,6 +12,34 @@ import { supabase } from '@/lib/supabase';
 const ANSWER_WAIT_MS = 60_000;
 /** "Got a fresh location" stays this long, then the button comes back. */
 const DONE_SHOWN_MS = 5_000;
+/** The server's wait between asks to the same person (request_location), counted down here. */
+const ASK_AGAIN_MS = 2 * 60_000;
+
+// When this phone last asked each person, so the countdown survives closing the card or the app.
+const askedKey = (userId: string) => `gtrack.asked.${userId}`;
+
+function readAskedAt(userId: string): number {
+  try {
+    return Number(localStorage.getItem(askedKey(userId))) || 0;
+  } catch {
+    return 0;
+  }
+}
+
+function writeAskedAt(userId: string, at: number | null) {
+  try {
+    if (at === null) localStorage.removeItem(askedKey(userId));
+    else localStorage.setItem(askedKey(userId), String(at));
+  } catch {
+    // Not remembered; the server still enforces the wait.
+  }
+}
+
+/** "1:45" for a countdown. */
+export function countdown(ms: number): string {
+  const seconds = Math.ceil(ms / 1000);
+  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
+}
 
 type State = { phase: 'idle' } | { phase: 'asking'; before: string | null } | { phase: 'failed'; message: string };
 
@@ -23,6 +51,11 @@ export type AskPhase = 'idle' | 'asking' | 'done' | 'failed';
  */
 export function useAskForLocation(member: Member, position: LivePosition | undefined, onAnswered: () => void) {
   const [state, setState] = useState<State>({ phase: 'idle' });
+  const [askedAt, setAskedAt] = useState(() => readAskedAt(member.userId));
+  const [now, setNow] = useState(() => Date.now());
+  /** Time left before this person can be asked again. */
+  const waitMs = Math.max(0, askedAt + ASK_AGAIN_MS - now);
+  const waiting = waitMs > 0;
   const recordedAt = position?.recordedAt ?? null;
   const name = member.displayName.split(' ')[0];
   // A newer position than the one from before asking. Compared with that, not with this
@@ -40,6 +73,13 @@ export function useAskForLocation(member: Member, position: LivePosition | undef
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [answered]);
 
+  // Count down to asking again, once a second.
+  useEffect(() => {
+    if (!waiting) return;
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, [waiting]);
+
   // No answer in time.
   useEffect(() => {
     if (state.phase !== 'asking' || answered) return;
@@ -50,20 +90,31 @@ export function useAskForLocation(member: Member, position: LivePosition | undef
     return () => clearTimeout(timer);
   }, [state.phase, answered, name]);
 
+  function startWait(at: number | null) {
+    setAskedAt(at ?? 0);
+    setNow(Date.now());
+    writeAskedAt(member.userId, at);
+  }
+
   async function ask() {
     setState({ phase: 'asking', before: recordedAt });
+    startWait(Date.now());
     const { data, error } = await supabase.functions.invoke<{ status: string }>('request-location', {
       body: { userId: member.userId },
     });
     if (error) {
-      setState({ phase: 'failed', message: friendlyError(await reasonFor(error)) });
+      const reason = await reasonFor(error);
+      // The server only counts an ask that passed its checks; a refused one (not sharing, offline)
+      // starts no wait. A send that failed, or "asked recently", does.
+      if (reason !== 'send_failed' && reason !== 'asked_recently') startWait(null);
+      setState({ phase: 'failed', message: friendlyError(reason) });
     } else if (data?.status === 'no_device') {
       setState({ phase: 'failed', message: `${name}'s phone can't answer yet. They need the latest G Track.` });
     }
     // Otherwise the wake-up is on its way; the answer shows up as a new position.
   }
 
-  return { phase, message: state.phase === 'failed' ? state.message : null, ask };
+  return { phase, message: state.phase === 'failed' ? state.message : null, waitMs, ask };
 }
 
 /** The function's own error key ("asked_recently") from its reply, if it sent one. */
