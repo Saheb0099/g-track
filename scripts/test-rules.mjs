@@ -4,14 +4,7 @@
 //
 //   npm run test:rules
 
-import {
-  distanceMeters,
-  isPrecise,
-  judgeFix,
-  nextHeld,
-  shouldSave,
-  snapToAnchor,
-} from '../src/features/location/rules.ts';
+import { distanceMeters, judgeFix, nextHeld, shouldSave } from '../src/features/location/rules.ts';
 
 const HOME = { lat: 22.5726, lng: 88.3639 };
 const MIN = 60_000;
@@ -38,21 +31,17 @@ function track(fixes) {
   return believed;
 }
 
-/** Runs fixes through the tracker's steps (believe, snap to the last GPS fix, save); returns saved points. */
+/** Runs fixes through the tracker's steps (believe, then save); returns saved points. */
 function saves(fixes, schedule = { checkEveryMs: MIN, saveEveryMs: 5 * MIN }) {
   let lastGood = null;
   let held = null;
-  let anchor = null;
   let lastSaved = null;
   const saved = [];
   for (const raw of fixes) {
     const { verdict, trip } = judgeFix(lastGood, held, raw);
     if (verdict === 'hold') held = nextHeld(held, raw);
     if (verdict !== 'accept') continue;
-    let fix = raw;
-    const snapped = snapToAnchor(anchor, raw);
-    if (snapped) fix = snapped;
-    else anchor = isPrecise(raw) ? raw : null;
+    const fix = raw;
     const previous = lastGood;
     lastGood = { ...fix, trip: !!trip };
     held = null;
@@ -179,24 +168,20 @@ for (const [name, kmh, acc] of [
   );
 }
 
-// Tower fixes (±200 m, hopping as the phone switches towers) shouldn't move a pin that sits still.
+// Tower fixes (±200 m, hopping as the phone switches towers) shouldn't be saved as moving.
 {
-  // GPS at home, then an hour indoors with tower fixes landing 300 m east or west.
-  const fixes = [];
-  for (let t = 1; t <= 60; t++) fixes.push({ ...east(HOME, t % 2 ? 0.3 : -0.3), time: t * MIN, accuracy: 200 });
-  const saved = saves(fromHome(fixes));
-  const off = saved.filter((f) => distanceMeters(HOME, f) > 50).length;
+  // What happened on 20 Nov: tower fixes at home, then one confident ±6 m GPS glitch 350 m away.
+  // The next tower fixes must win again, not the glitch.
+  const fixes = [0, 1, 2].map((t) => ({ ...HOME, time: t * MIN, accuracy: 200 }));
+  fixes.push({ ...east(HOME, 0.35), time: 3 * MIN, accuracy: 6 });
+  for (let t = 4; t <= 20; t++) fixes.push({ ...HOME, time: t * MIN, accuracy: 200 });
+  const after = saves(fixes).filter((f) => f.time > 10 * MIN);
+  const atGlitch = after.filter((f) => distanceMeters(HOME, f) > 250).length;
   check(
-    'After GPS, tower fixes indoors keep the GPS spot',
-    off === 0 && saved.length >= 12,
-    `${saved.length} saved, ${off} off the GPS spot`,
+    'A confident GPS glitch indoors does not stick',
+    after.length > 0 && atGlitch === 0,
+    `${atGlitch} of ${after.length} later points at the glitch`,
   );
-}
-{
-  // GPS at home, then leaving by car with only tower fixes: the pin follows once they no longer fit.
-  const saved = saves(fromHome(trip(30, 200, 20)));
-  const far = saved.filter((f) => distanceMeters(HOME, f) > 2000).length;
-  check('After GPS, leaving with tower fixes still moves the pin', far >= 3, `${far} saved points over 2 km away`);
 }
 {
   // No GPS at all: settled on one tower, then hopping to another 600 m away every other minute.

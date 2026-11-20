@@ -12,14 +12,12 @@ import {
   clockMovedBack,
   distanceMeters,
   DEFAULT_SCHEDULE,
-  isPrecise,
   judgeFix,
   nextHeld,
   SAVE_AFTER_METERS,
   saveDueMs,
   scheduleFor,
   shouldSave,
-  snapToAnchor,
   type Fix,
   type Schedule,
   type Verdict,
@@ -197,22 +195,17 @@ export function recordReading(
 }
 
 async function recordReadingNow(
-  reading: Location.LocationObject,
+  location: Location.LocationObject,
   options: ReadingOptions,
 ): Promise<{ saved: boolean; verdict: Verdict }> {
-  let location = reading;
-  let fix: Fix = {
+  const fix: Fix = {
     lat: location.coords.latitude,
     lng: location.coords.longitude,
     time: location.timestamp,
     accuracy: location.coords.accuracy,
   };
 
-  const [lastGood, held, anchor] = await Promise.all([
-    getState<Fix>('last_good'),
-    getState<Fix>('held_jump'),
-    getState<Fix>('anchor'),
-  ]);
+  const [lastGood, held] = await Promise.all([getState<Fix>('last_good'), getState<Fix>('held_jump')]);
   const { verdict, reason, trip, keepHeld } = judgeFix(lastGood, held, fix);
   if (verdict !== 'accept') {
     if (verdict === 'hold') await setState('held_jump', nextHeld(held, fix));
@@ -220,21 +213,6 @@ async function recordReadingNow(
     return { saved: false, verdict };
   }
   if (trip) await logEvent(`accept fix: ${reason}`);
-
-  // A rough (tower) fix that fits the last GPS fix: the phone is still where GPS put it.
-  const snapped = snapToAnchor(anchor, fix);
-  if (snapped) {
-    fix = snapped;
-    location = {
-      ...location,
-      coords: { ...location.coords, latitude: fix.lat, longitude: fix.lng, accuracy: fix.accuracy ?? null },
-    };
-  } else if (isPrecise(fix)) {
-    await setState('anchor', fix);
-  } else if (anchor) {
-    await logEvent('rough fix no longer fits the last GPS fix; letting it go');
-    await setState('anchor', null);
-  }
   await setState('last_good', { ...fix, trip: !!trip });
   if (held) await setState('held_jump', null);
 

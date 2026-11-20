@@ -36,7 +36,7 @@ A free location-sharing app for a circle of friends. Android first.
 ### Fixes
 
 - [x] Indoors after a gap, rough Wi-Fi/cell fixes that agree are now saved (before, nothing was until a GPS fix)
-- [x] Indoors, rough tower fixes no longer pull the pin off a recent GPS spot, and tower hops aren't saved as moves
+- [x] Indoors, a single hop between mobile towers isn't saved as a move
 
 ### Security
 

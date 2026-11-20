@@ -270,6 +270,9 @@ npm run test:db      # database access rules, run on the linked project and roll
 
 After changing the database, refresh the TypeScript types with `npm run gen:types`.
 
+Before changing how locations are judged or saved, read [LESSONS.md](LESSONS.md): ideas that
+went wrong and the rules they taught.
+
 ## Troubleshooting
 
 - **"Google rejected this app build":** the package name or SHA-1 in your Android client
