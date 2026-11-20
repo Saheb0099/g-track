@@ -77,7 +77,10 @@ export default function Home() {
   }, []);
 
   // Following keeps the map on that person as their new positions arrive.
-  const positions = live.data ?? [];
+  // Someone who stopped sharing with this group stays visible through another group you share,
+  // but isn't drawn here. Your own pin always shows, as it does while you're paused.
+  const hiddenHere = new Set(members.data?.filter((m) => m.hiddenAt && m.userId !== meId).map((m) => m.userId));
+  const positions = (live.data ?? []).filter((p) => !hiddenHere.has(p.userId));
   const followed = positions.find((p) => p.userId === followId);
   useEffect(() => {
     if (followId) map.current?.follow(followId);

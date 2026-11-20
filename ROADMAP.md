@@ -42,10 +42,10 @@ A free location-sharing app for a circle of friends. Android first.
 - [X] 1.0.0
 - [X] 1.0.1
 - [X] 1.0.2
+- [X] 1.0.3: dark-mode buttons, new pause options, group switch, today's distance, backup fix
 
 ## Next
 
-- [ ] **Release 1.0.3:** dark-mode buttons, new pause options, group switch, today's distance, backup fix
 - [ ] Real-world tests:
   - [ ] a train or bus ride
   - [ ] a full day's battery use
