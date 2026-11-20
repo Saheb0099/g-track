@@ -1,21 +1,14 @@
-import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Fragment, useState } from 'react';
-import {
-  ActivityIndicator,
-  Alert,
-  KeyboardAvoidingView,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Switch,
-  Text,
-  View,
-} from 'react-native';
+import { ActivityIndicator, Alert, KeyboardAvoidingView, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { Text } from '@/components/text';
 import { Button } from '@/components/button';
 import { Card, RowDivider, SectionLabel } from '@/components/card';
+import { Icon } from '@/components/icon';
+import { IconButton } from '@/components/surface';
+import { Switch } from '@/components/switch';
 import { TextField } from '@/components/text-field';
 import {
   MAX_MEMBERS,
@@ -40,7 +33,7 @@ import { useLivePositions } from '@/features/map/api';
 import { staleAfterMs } from '@/features/map/group-map';
 import { useAuth } from '@/lib/auth';
 import { friendlyError } from '@/lib/errors';
-import { fonts, radius, type as typeStyles, useColors } from '@/lib/theme';
+import { type as typeStyles, useColors } from '@/lib/theme';
 
 const showError = (error: unknown) => Alert.alert('Something went wrong', friendlyError(error));
 
@@ -179,7 +172,9 @@ export default function GroupSettings() {
     <KeyboardAvoidingView behavior="padding" style={[styles.flex, { backgroundColor: colors.background }]}>
       <ScrollView
         keyboardShouldPersistTaps="handled"
-        contentContainerStyle={[styles.container, { paddingTop: safe.top + 12, paddingBottom: safe.bottom + 32 }]}>
+        // Ends at Android's navigation bar, so nothing scrolls behind its buttons.
+        style={{ marginBottom: safe.bottom }}
+        contentContainerStyle={[styles.container, { paddingTop: safe.top + 12, paddingBottom: 32 }]}>
         <View style={styles.header}>
           <View style={[styles.badge, { backgroundColor: colors.accent }]}>
             <Text style={[typeStyles.heading, { color: colors.onAccent, fontSize: 18 }]}>
@@ -194,22 +189,15 @@ export default function GroupSettings() {
               {memberList.length} of {MAX_MEMBERS} members{isAdmin ? " · You're admin" : ''}
             </Text>
           </View>
-          <Pressable
-            onPress={close}
-            accessibilityRole="button"
-            accessibilityLabel="Close"
-            hitSlop={8}
-            style={[styles.close, { backgroundColor: colors.fill }]}>
-            <Ionicons name="close" size={18} color={colors.muted} />
-          </Pressable>
+          <IconButton icon="close" filled accessibilityLabel="Close" onPress={close} />
         </View>
 
         {deletingOn && (
           <Card style={[styles.invite, { backgroundColor: colors.dangerFill }]}>
-            <Text style={[typeStyles.bodyStrong, { color: colors.danger }]}>
+            <Text style={[typeStyles.bodyStrong, { color: colors.onDangerFill }]}>
               This group will be deleted on {deletingOn}
             </Text>
-            <Text style={[typeStyles.body, { color: colors.text }]}>
+            <Text style={[typeStyles.caption, { color: colors.onDangerFill }]}>
               {isAdmin
                 ? 'Nobody new can join until then. Changed your mind? Cancel it and the group carries on as before.'
                 : `Nobody new can join. Only ${admin?.displayName ?? 'the admin'} (the admin) can cancel it.`}
@@ -234,8 +222,8 @@ export default function GroupSettings() {
                 accessible
                 accessibilityLabel={`Join code ${invite.data.split('').join(' ')}`}>
                 {invite.data.split('').map((ch, i) => (
-                  <View key={i} style={[styles.codeBox, { backgroundColor: colors.background }]}>
-                    <Text style={[styles.codeChar, { color: colors.text }]}>{ch}</Text>
+                  <View key={i} style={[styles.codeBox, { backgroundColor: colors.accentFill }]}>
+                    <Text style={[styles.codeChar, { color: colors.onAccentFill }]}>{ch}</Text>
                   </View>
                 ))}
               </View>
@@ -248,9 +236,15 @@ export default function GroupSettings() {
                 style={styles.flex}
                 disabled={!invite.data}
                 onPress={() => invite.data && shareInvite(groupName, invite.data)}
-                icon={<Ionicons name="share-outline" size={18} color={colors.onAccent} />}
+                icon="share"
               />
-              <Button title="New code" variant="secondary" loading={regenerate.isPending} onPress={confirmNewCode} />
+              <Button
+                title="New code"
+                variant="text"
+                icon="refresh"
+                loading={regenerate.isPending}
+                onPress={confirmNewCode}
+              />
             </View>
           </Card>
         ) : (
@@ -279,23 +273,16 @@ export default function GroupSettings() {
                   trailing={
                     member.userId === adminId ? (
                       <View style={[styles.adminChip, { backgroundColor: colors.accentFill }]}>
-                        <Text
-                          style={[
-                            typeStyles.caption,
-                            { color: colors.accentText, fontFamily: fonts.bold, fontSize: 12 },
-                          ]}>
+                        <Text style={[typeStyles.label, { color: colors.onAccentFill, fontSize: 12, lineHeight: 16 }]}>
                           Admin
                         </Text>
                       </View>
                     ) : isAdmin ? (
-                      <Pressable
-                        onPress={() => memberActions(member)}
-                        hitSlop={10}
-                        accessibilityRole="button"
+                      <IconButton
+                        icon="more_vert"
                         accessibilityLabel={`Options for ${member.displayName}`}
-                        style={styles.more}>
-                        <Ionicons name="ellipsis-horizontal" size={22} color={colors.muted} />
-                      </Pressable>
+                        onPress={() => memberActions(member)}
+                      />
                     ) : (
                       <View />
                     )
@@ -310,11 +297,12 @@ export default function GroupSettings() {
           <SectionLabel>Your location</SectionLabel>
           <Card>
             <View style={styles.switchRow}>
-              <View style={[styles.icon, { backgroundColor: sharingHere ? colors.accentFill : colors.fill }]}>
-                <Ionicons
-                  name={sharingHere ? 'radio' : 'eye-off'}
-                  size={18}
-                  color={sharingHere ? colors.accent : colors.muted}
+              <View style={[styles.icon, { backgroundColor: sharingHere ? colors.tonal : colors.fill }]}>
+                <Icon
+                  name={sharingHere ? 'share_location' : 'visibility_off'}
+                  size={22}
+                  filled={sharingHere}
+                  color={sharingHere ? colors.onTonal : colors.muted}
                 />
               </View>
               <View style={styles.flex}>
@@ -329,8 +317,6 @@ export default function GroupSettings() {
                 value={sharingHere}
                 onValueChange={toggleSharingHere}
                 accessibilityLabel="Share with this group"
-                trackColor={{ true: colors.accent, false: colors.fill }}
-                thumbColor="#FFFFFF"
               />
             </View>
           </Card>
@@ -363,7 +349,7 @@ export default function GroupSettings() {
         )}
 
         <View style={styles.account}>
-          <Button title="Leave group" variant="danger" loading={leave.isPending} onPress={confirmLeave} />
+          <Button title="Leave group" variant="danger" icon="logout" loading={leave.isPending} onPress={confirmLeave} />
           {isAdmin && !deletingOn && (
             <Pressable
               onPress={confirmDelete}
@@ -374,7 +360,10 @@ export default function GroupSettings() {
               {deleteGroup.isPending ? (
                 <ActivityIndicator color={colors.danger} />
               ) : (
-                <Text style={[typeStyles.bodyStrong, { color: colors.danger }]}>Delete group</Text>
+                <View style={styles.deleteRow}>
+                  <Icon name="delete" size={20} color={colors.danger} />
+                  <Text style={[typeStyles.button, { color: colors.danger }]}>Delete group</Text>
+                </View>
               )}
             </Pressable>
           )}
@@ -420,7 +409,7 @@ function TimingForm({
     <View style={styles.section}>
       <Card>
         <MinutesStepper label="Check location every" value={check} onChange={changeCheck} editable={editable} />
-        <RowDivider inset={14} />
+        <RowDivider inset={16} />
         <MinutesStepper label="Save location every" value={save} onChange={changeSave} editable={editable} />
       </Card>
       <Text style={[typeStyles.caption, { color: colors.muted }]}>
@@ -462,9 +451,9 @@ function MinutesStepper({
       accessibilityLabel={`${by < 0 ? 'Less' : 'More'} often`}
       style={({ pressed }) => [
         styles.stepButton,
-        { backgroundColor: colors.fill, opacity: disabled ? 0.35 : pressed ? 0.6 : 1 },
+        { backgroundColor: colors.tonal, opacity: disabled ? 0.38 : pressed ? 0.7 : 1 },
       ]}>
-      <Ionicons name={icon} size={20} color={colors.text} />
+      <Icon name={icon} size={20} color={colors.onTonal} />
     </Pressable>
   );
   return (
@@ -499,34 +488,33 @@ function RenameForm({ current, saving, onSave }: { current: string; saving: bool
 
 const styles = StyleSheet.create({
   account: { gap: 8 },
-  deleteLink: { height: 44, alignItems: 'center', justifyContent: 'center' },
+  deleteLink: { height: 48, alignItems: 'center', justifyContent: 'center' },
+  deleteRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   container: { paddingHorizontal: 16, gap: 22 },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 16, padding: 24 },
   header: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   badge: { width: 46, height: 46, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
-  close: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
   flex: { flex: 1 },
   invite: { padding: 18, gap: 14 },
   codeRow: { flexDirection: 'row', gap: 6 },
-  codeBox: { flex: 1, height: 56, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
-  codeChar: { fontFamily: fonts.extrabold, fontSize: 26 },
+  codeBox: { flex: 1, height: 56, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  codeChar: { fontFamily: 'monospace', fontSize: 26 },
   codeLoading: { height: 56 },
   row: { flexDirection: 'row', gap: 10 },
   section: { gap: 8 },
-  adminChip: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: radius.pill },
-  more: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
+  adminChip: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8 },
   switchRow: {
-    minHeight: 64,
+    minHeight: 72,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
+    gap: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
   },
-  icon: { width: 36, height: 36, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+  icon: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
   renameRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 10 },
-  saveButton: { height: 54, borderRadius: 16 },
-  stepRow: { minHeight: 60, flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 14 },
-  stepButton: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
+  saveButton: { marginBottom: 4 },
+  stepRow: { minHeight: 64, flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 16 },
+  stepButton: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
   stepValue: { minWidth: 56, textAlign: 'center' },
 });

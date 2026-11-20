@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 
+import { Text } from '@/components/text';
 import { Avatar } from '@/components/avatar';
 import { Battery } from '@/components/battery';
 import type { Member } from '@/features/groups/api';
@@ -45,7 +46,7 @@ export function MemberRow({ member, position, now, isYou, isAdmin, staleMs, onPr
     // A deleted account is paused too, but its status line already says so.
     (member.deletedAt ? null : paused ? (
       <View style={[styles.chip, { backgroundColor: colors.fill }]}>
-        <Text style={[typeStyles.caption, { color: colors.muted, fontSize: 12 }]}>Paused</Text>
+        <Text style={[typeStyles.label, { color: colors.muted, fontSize: 12, lineHeight: 16 }]}>Paused</Text>
       </View>
     ) : position?.batteryPct != null ? (
       <Battery percent={position.batteryPct} />
@@ -56,7 +57,8 @@ export function MemberRow({ member, position, now, isYou, isAdmin, staleMs, onPr
       onPress={onPress}
       disabled={!onPress}
       accessibilityRole={onPress ? 'button' : undefined}
-      style={({ pressed }) => [styles.row, { opacity: pressed ? 0.6 : 1 }]}>
+      android_ripple={onPress ? { color: `${colors.text}14` } : undefined}
+      style={styles.row}>
       <Avatar name={member.displayName} uri={member.avatarUrl} dim={paused} />
       <View style={styles.text}>
         <Text style={[typeStyles.bodyStrong, { color: colors.text }]} numberOfLines={1}>
@@ -75,13 +77,13 @@ export function MemberRow({ member, position, now, isYou, isAdmin, staleMs, onPr
 
 const styles = StyleSheet.create({
   row: {
-    minHeight: 64,
+    minHeight: 72,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
+    gap: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
   },
-  text: { flex: 1, gap: 2 },
-  chip: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999 },
+  text: { flex: 1 },
+  chip: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8 },
 });

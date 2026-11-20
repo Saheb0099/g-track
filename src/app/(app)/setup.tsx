@@ -1,23 +1,14 @@
-import { Ionicons } from '@expo/vector-icons';
 import { useQueryClient } from '@tanstack/react-query';
 import Constants from 'expo-constants';
 import * as IntentLauncher from 'expo-intent-launcher';
 import * as Location from 'expo-location';
 import { useEffect, useState, type ReactNode } from 'react';
-import {
-  Alert,
-  AppState,
-  Linking,
-  PermissionsAndroid,
-  ScrollView,
-  StyleSheet,
-  Text,
-  ToastAndroid,
-  View,
-} from 'react-native';
+import { Alert, AppState, Linking, PermissionsAndroid, ScrollView, StyleSheet, ToastAndroid, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { Text } from '@/components/text';
 import { Button } from '@/components/button';
+import { Icon } from '@/components/icon';
 import { openAppSettings, openStepPage, phoneSteps, type PhoneStep } from '@/features/location/phone-steps';
 import { useSetupChecks, useTracking } from '@/features/location/use-tracking';
 import { radius, type as typeStyles, useColors } from '@/lib/theme';
@@ -139,15 +130,12 @@ export default function LocationSetup() {
 
   return (
     <ScrollView
-      style={{ backgroundColor: colors.background }}
-      contentContainerStyle={[styles.container, { paddingBottom: safe.bottom + 32 }]}>
+      // Ends at Android's navigation bar, so nothing scrolls behind its buttons.
+      style={{ backgroundColor: colors.background, marginBottom: safe.bottom }}
+      contentContainerStyle={[styles.container, { paddingBottom: 32 }]}>
       <View style={[styles.banner, { backgroundColor: sharingOn ? colors.accentFill : colors.surface }]}>
-        <Ionicons
-          name={sharingOn ? 'radio' : 'radio-outline'}
-          size={24}
-          color={sharingOn ? colors.accent : colors.muted}
-        />
-        <Text style={[typeStyles.body, styles.flex, { color: colors.text }]}>
+        <Icon name="share_location" filled={!!sharingOn} color={sharingOn ? colors.onAccentFill : colors.muted} />
+        <Text style={[typeStyles.body, styles.flex, { color: sharingOn ? colors.onAccentFill : colors.text }]}>
           {sharingOn
             ? 'Sharing your location. Finish the steps below so it keeps working in the background.'
             : 'Complete the first two steps to start sharing your location with your groups.'}
@@ -200,8 +188,8 @@ export default function LocationSetup() {
       />
 
       {phone.steps.length > 0 && (
-        <Text style={[typeStyles.label, styles.section, { color: colors.muted }]}>
-          {`${phone.brand.toUpperCase()} SETTINGS`}
+        <Text style={[typeStyles.label, styles.section, { color: colors.accentText }]}>
+          {`${phone.brand} settings`}
         </Text>
       )}
       {phone.steps.map((step, i) => {
@@ -263,7 +251,7 @@ export default function LocationSetup() {
   );
 }
 
-// Buttons: blue (primary) for the action that does a step (Allow, Open), grey for the rest
+// Buttons: filled for the action that does a step (Allow, Open), tonal for the rest
 // (Done, Change, Undo), on every step.
 function Step({
   done,
@@ -285,14 +273,14 @@ function Step({
   return (
     <View style={[styles.step, { backgroundColor: colors.surface }]}>
       <View style={styles.stepHeader}>
-        <Ionicons
-          name={done ? 'checkmark-circle' : 'ellipse-outline'}
-          size={24}
-          color={done ? colors.success : colors.muted}
+        <Icon
+          name={done ? 'check_circle' : 'radio_button_unchecked'}
+          filled={done}
+          color={done ? colors.success : colors.outline}
         />
-        <Text style={[typeStyles.bodyStrong, styles.flex, { color: colors.text, fontSize: 17 }]}>{title}</Text>
+        <Text style={[typeStyles.bodyStrong, styles.flex, { color: colors.text }]}>{title}</Text>
       </View>
-      <Text style={[typeStyles.body, { color: colors.muted }]}>{body}</Text>
+      <Text style={[typeStyles.caption, { color: colors.muted }]}>{body}</Text>
       {done ? doneAction : action}
       {footer}
     </View>
@@ -309,7 +297,7 @@ const styles = StyleSheet.create({
     padding: 16,
   },
   step: { borderRadius: radius.card, padding: 16, gap: 12 },
-  stepHeader: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  stepHeader: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   row: { flexDirection: 'row', gap: 10 },
   section: { marginTop: 12, marginLeft: 4 },
   guide: { textAlign: 'center', marginTop: 4 },

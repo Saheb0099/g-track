@@ -1,7 +1,8 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import type { ReactNode } from 'react';
-import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, StyleSheet, View } from 'react-native';
 
+import { Text } from '@/components/text';
 import { Button } from '@/components/button';
 import { isValidCode, MAX_MEMBERS, normalizeCode, useJoinGroup, usePreviewGroup } from '@/features/groups/api';
 import { errorMessage, friendlyError } from '@/lib/errors';

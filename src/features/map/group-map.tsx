@@ -1,13 +1,24 @@
-import { Camera, GeoJSONSource, Layer, Map, Marker, type CameraRef } from '@maplibre/maplibre-react-native';
+import {
+  Camera,
+  GeoJSONSource,
+  Layer,
+  Map,
+  Marker,
+  type CameraRef,
+  type ViewState,
+} from '@maplibre/maplibre-react-native';
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
-import { Avatar, avatarColor } from '@/components/avatar';
+import { Text } from '@/components/text';
+import { Avatar, avatarColors } from '@/components/avatar';
 import type { Member } from '@/features/groups/api';
 import { distanceMeters } from '@/features/location/rules';
 import type { LivePosition } from '@/features/map/api';
 import { boundsAround, circlePolygon } from '@/features/map/geo';
+import { MapCredit } from '@/features/map/map-credit';
 import { useMapStyle } from '@/features/map/styles';
+import { useAppColorScheme } from '@/lib/appearance';
 import { fonts, useColors } from '@/lib/theme';
 
 /**
@@ -42,6 +53,8 @@ export type GroupMapHandle = {
   /** Moves to the person without changing the zoom (for following). */
   follow: (userId: string) => void;
   showEveryone: () => void;
+  /** Turns the map back to north-up (and flat), staying where it is. */
+  faceNorth: () => void;
 };
 
 type Props = {
@@ -56,19 +69,25 @@ type Props = {
   staleMs: number;
   /** The group shown: switching to another frames its people. */
   frameKey: string;
+  /** The map's rotation in whole degrees, as it turns (for the compass button). */
+  onBearingChange?: (degrees: number) => void;
 };
 
 export const GroupMap = forwardRef<GroupMapHandle, Props>(function GroupMap(
-  { positions, members, now, meId, selectedId, onSelect, insets, staleMs, frameKey },
+  { positions, members, now, meId, selectedId, onSelect, insets, staleMs, frameKey, onBearingChange },
   ref,
 ) {
   const colors = useColors();
+  const dark = useAppColorScheme() === 'dark';
   const mapStyle = useMapStyle();
   const camera = useRef<CameraRef>(null);
   const framedFor = useRef<string | null>(null);
   // A tap on a pin also reaches the map under it, whose tap means "deselect". Remembered here, so
   // the map can tell a tap on empty map from one that landed on a pin, whichever arrives first.
   const pinTappedAt = useRef(0);
+  // Where the camera is now: turning to north keeps this centre and zoom.
+  const view = useRef<ViewState | null>(null);
+  const bearing = useRef(0);
   // The camera ignores moves made before the map has loaded its style.
   const [loaded, setLoaded] = useState(false);
 
@@ -110,7 +129,21 @@ export const GroupMap = forwardRef<GroupMapHandle, Props>(function GroupMap(
       if (p) camera.current?.easeTo({ center: [p.lng, p.lat], duration: 600, padding });
     },
     showEveryone: () => showEveryone(),
+    faceNorth: () => {
+      const now = view.current;
+      if (now) camera.current?.easeTo({ center: now.center, zoom: now.zoom, bearing: 0, pitch: 0, duration: 400 });
+    },
   }));
+
+  function trackView(next: ViewState) {
+    view.current = next;
+    // Whole degrees only, so the compass updates without re-rendering on every frame of a pan.
+    const degrees = Math.round(next.bearing) % 360;
+    if (degrees !== bearing.current) {
+      bearing.current = degrees;
+      onBearingChange?.(degrees);
+    }
+  }
 
   // Frame everyone once the map is ready and the first positions are in, and again (animated)
   // after switching groups, whose people may be somewhere else entirely.
@@ -123,105 +156,116 @@ export const GroupMap = forwardRef<GroupMapHandle, Props>(function GroupMap(
   }, [loaded, points.length, frameKey]);
 
   return (
-    <Map
-      style={StyleSheet.absoluteFill}
-      mapStyle={mapStyle}
-      logo={false}
-      compass={false}
-      // The OpenStreetMap credit must stay visible: just under the top bar, clear of the sheet.
-      attributionPosition={{ top: insets.top + 8, left: 16 }}
-      // Texture rendering lets the frosted panels blur the map behind them.
-      androidView="texture"
-      onDidFinishLoadingMap={() => setLoaded(true)}
-      onPress={() =>
-        setTimeout(() => {
-          if (Date.now() - pinTappedAt.current > 400) onSelect(null);
-        }, 80)
-      }>
-      <Camera ref={camera} initialViewState={{ center: [0, 20], zoom: 1 }} />
+    <>
+      <Map
+        style={StyleSheet.absoluteFill}
+        mapStyle={mapStyle}
+        logo={false}
+        compass={false}
+        // The credit is our own label below (MapCredit), in place of MapLibre's (i) button.
+        attribution={false}
+        androidView="texture"
+        onDidFinishLoadingMap={() => setLoaded(true)}
+        onRegionIsChanging={(e) => trackView(e.nativeEvent)}
+        onRegionDidChange={(e) => trackView(e.nativeEvent)}
+        onPress={() =>
+          setTimeout(() => {
+            if (Date.now() - pinTappedAt.current > 400) onSelect(null);
+          }, 80)
+        }>
+        <Camera ref={camera} initialViewState={{ center: [0, 20], zoom: 1 }} />
 
-      <GeoJSONSource id="accuracy" data={rings}>
-        <Layer
-          type="fill"
-          id="accuracy-fill"
-          paint={{ 'fill-color': colors.accent, 'fill-opacity': 0.12, 'fill-outline-color': colors.accent }}
-        />
-      </GeoJSONSource>
+        <GeoJSONSource id="accuracy" data={rings}>
+          <Layer
+            type="fill"
+            id="accuracy-fill"
+            paint={{ 'fill-color': colors.accent, 'fill-opacity': 0.12, 'fill-outline-color': colors.accent }}
+          />
+        </GeoJSONSource>
 
-      {groupClose(positions, meId).map((group) => {
-        const first = (p: LivePosition) =>
-          p.userId === meId ? 'You' : (people.get(p.userId)?.displayName ?? '?').split(' ')[0];
-        const names = group.map(first);
-        const label = names.length <= 2 ? names.join(', ') : `${names[0]} +${names.length - 1}`;
-        const selected = group.some((p) => p.userId === selectedId);
-        const stale = group.every((p) => now - Date.parse(p.recordedAt) > staleMs);
-        // Tapping a shared pin opens a friend's card rather than your own.
-        const target = group.find((p) => p.userId !== meId) ?? group[0];
-        const lat = group.reduce((sum, p) => sum + p.lat, 0) / group.length;
-        const lng = group.reduce((sum, p) => sum + p.lng, 0) / group.length;
-        const faces = group.slice(0, group.length > MAX_FACES ? MAX_FACES - 1 : MAX_FACES);
-        const extra = group.length - faces.length;
-        const size = group.length > 1 ? 40 : selected ? 54 : 46;
-        const ring = selected ? colors.accent : '#FFFFFF';
-        return (
-          // A pin: the marker's bottom edge, the tip of the pointer, sits exactly on the location.
-          <Marker
-            key={group.map((p) => p.userId).join(',')}
-            id={group.map((p) => p.userId).join(',')}
-            lngLat={[lng, lat]}
-            anchor="bottom"
-            onPress={() => {
-              pinTappedAt.current = Date.now();
-              onSelect(target.userId);
-            }}>
-            <View
-              style={[styles.marker, { opacity: stale ? 0.55 : 1 }]}
-              accessibilityLabel={`${names.join(', ')} on the map`}>
-              <View style={[styles.label, { backgroundColor: colors.glass, borderColor: colors.glassBorder }]}>
-                <Text style={[styles.labelText, { color: colors.text }]} numberOfLines={1}>
-                  {label}
-                </Text>
-              </View>
-              <View style={styles.faces}>
-                {faces.map((p, i) => {
-                  const member = people.get(p.userId);
-                  const name = member?.displayName ?? '?';
-                  return (
+        {groupClose(positions, meId).map((group) => {
+          const first = (p: LivePosition) =>
+            p.userId === meId ? 'You' : (people.get(p.userId)?.displayName ?? '?').split(' ')[0];
+          const names = group.map(first);
+          const label = names.length <= 2 ? names.join(', ') : `${names[0]} +${names.length - 1}`;
+          const selected = group.some((p) => p.userId === selectedId);
+          const stale = group.every((p) => now - Date.parse(p.recordedAt) > staleMs);
+          // Tapping a shared pin opens a friend's card rather than your own.
+          const target = group.find((p) => p.userId !== meId) ?? group[0];
+          const lat = group.reduce((sum, p) => sum + p.lat, 0) / group.length;
+          const lng = group.reduce((sum, p) => sum + p.lng, 0) / group.length;
+          const faces = group.slice(0, group.length > MAX_FACES ? MAX_FACES - 1 : MAX_FACES);
+          const extra = group.length - faces.length;
+          const size = group.length > 1 ? 40 : selected ? 54 : 46;
+          const ring = selected ? colors.accent : '#FFFFFF';
+          return (
+            // A pin: the marker's bottom edge, the tip of the pointer, sits exactly on the location.
+            <Marker
+              key={group.map((p) => p.userId).join(',')}
+              id={group.map((p) => p.userId).join(',')}
+              lngLat={[lng, lat]}
+              anchor="bottom"
+              onPress={() => {
+                pinTappedAt.current = Date.now();
+                onSelect(target.userId);
+              }}>
+              <View
+                style={[styles.marker, { opacity: stale ? 0.55 : 1 }]}
+                accessibilityLabel={`${names.join(', ')} on the map`}>
+                <View style={[styles.label, { backgroundColor: selected ? colors.accent : colors.glass }]}>
+                  <Text
+                    style={[styles.labelText, { color: selected ? colors.onAccent : colors.text }]}
+                    numberOfLines={1}>
+                    {label}
+                  </Text>
+                </View>
+                <View style={styles.faces}>
+                  {faces.map((p, i) => {
+                    const member = people.get(p.userId);
+                    const name = member?.displayName ?? '?';
+                    return (
+                      <View
+                        key={p.userId}
+                        style={[
+                          styles.pin,
+                          i > 0 && styles.overlap,
+                          {
+                            borderRadius: size / 2 + 3,
+                            borderColor: ring,
+                            backgroundColor: avatarColors(name, dark)[0],
+                          },
+                        ]}>
+                        <Avatar name={name} uri={member?.avatarUrl} size={size} />
+                      </View>
+                    );
+                  })}
+                  {extra > 0 && (
                     <View
-                      key={p.userId}
                       style={[
                         styles.pin,
-                        i > 0 && styles.overlap,
-                        { borderRadius: size / 2 + 3, borderColor: ring, backgroundColor: avatarColor(name) },
+                        styles.overlap,
+                        styles.more,
+                        {
+                          width: size + 6,
+                          height: size + 6,
+                          borderRadius: size / 2 + 3,
+                          borderColor: ring,
+                          backgroundColor: colors.strong,
+                        },
                       ]}>
-                      <Avatar name={name} uri={member?.avatarUrl} size={size} />
+                      <Text style={[styles.labelText, { color: colors.onStrong }]}>+{extra}</Text>
                     </View>
-                  );
-                })}
-                {extra > 0 && (
-                  <View
-                    style={[
-                      styles.pin,
-                      styles.overlap,
-                      styles.more,
-                      {
-                        width: size + 6,
-                        height: size + 6,
-                        borderRadius: size / 2 + 3,
-                        borderColor: ring,
-                        backgroundColor: colors.strong,
-                      },
-                    ]}>
-                    <Text style={[styles.labelText, { color: colors.onStrong }]}>+{extra}</Text>
-                  </View>
-                )}
+                  )}
+                </View>
+                <View style={[styles.pointer, { borderTopColor: ring }]} />
               </View>
-              <View style={[styles.pointer, { borderTopColor: ring }]} />
-            </View>
-          </Marker>
-        );
-      })}
-    </Map>
+            </Marker>
+          );
+        })}
+      </Map>
+      {/* The OpenStreetMap credit must stay visible: just under the top bar, clear of the sheet. */}
+      <MapCredit top={insets.top + 8} />
+    </>
   );
 });
 
@@ -230,9 +274,13 @@ const styles = StyleSheet.create({
   label: {
     marginBottom: 4,
     paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 999,
-    borderWidth: 1,
+    paddingVertical: 2,
+    borderRadius: 8,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOpacity: 0.2,
+    shadowRadius: 3,
+    shadowOffset: { width: 0, height: 1 },
   },
   labelText: { fontFamily: fonts.bold, fontSize: 12 },
   faces: { flexDirection: 'row' },

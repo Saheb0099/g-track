@@ -1,11 +1,12 @@
-import { Ionicons } from '@expo/vector-icons';
 import { Camera, Map } from '@maplibre/maplibre-react-native';
 import { useQuery } from '@tanstack/react-query';
 import * as Location from 'expo-location';
 import { router } from 'expo-router';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { Text } from '@/components/text';
+import { Icon } from '@/components/icon';
 import { MAP_STYLES, setMapStyle, useChosenMapStyle, useStyleFor, type MapStyle } from '@/features/map/styles';
 import { radius, type as typeStyles, useColors } from '@/lib/theme';
 
@@ -33,8 +34,9 @@ export default function MapStylePicker() {
 
   return (
     <ScrollView
-      style={{ backgroundColor: colors.background }}
-      contentContainerStyle={[styles.container, { paddingBottom: safe.bottom + 32 }]}>
+      // Ends at Android's navigation bar, so nothing scrolls behind its buttons.
+      style={{ backgroundColor: colors.background, marginBottom: safe.bottom }}
+      contentContainerStyle={[styles.container, { paddingBottom: 32 }]}>
       <View style={styles.grid}>
         {/* Wait for the position so each preview opens in the right place. */}
         {!here.isPending &&
@@ -78,7 +80,11 @@ function Preview({
       <View
         style={[
           styles.thumb,
-          { backgroundColor: colors.surface, borderColor: selected ? colors.accent : colors.border },
+          {
+            backgroundColor: colors.surface,
+            borderColor: selected ? colors.accent : colors.border,
+            borderRadius: selected ? 24 : 16,
+          },
           selected && styles.thumbSelected,
         ]}>
         {/* A still picture of the map: touches go to the card, not the map. */}
@@ -100,7 +106,7 @@ function Preview({
         </View>
         {selected && (
           <View style={[styles.check, { backgroundColor: colors.accent }]}>
-            <Ionicons name="checkmark" size={16} color={colors.onAccent} />
+            <Icon name="check" size={18} color={colors.onAccent} />
           </View>
         )}
       </View>

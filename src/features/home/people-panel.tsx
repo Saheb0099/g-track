@@ -1,10 +1,11 @@
-import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { Fragment } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 
+import { Text } from '@/components/text';
 import { Button } from '@/components/button';
 import { Card, RowDivider } from '@/components/card';
+import { Icon } from '@/components/icon';
 import { formatDeletionDate, type GroupSummary, type Member } from '@/features/groups/api';
 import { MemberRow } from '@/features/groups/member-row';
 import { useSharingStatus } from '@/features/location/sharing-status';
@@ -41,12 +42,7 @@ export function PeoplePanel({ group, members, positions, now, meId, onSelect }: 
       <View style={styles.header}>
         <Text style={[typeStyles.heading, styles.headerText, { color: colors.text }]}>People</Text>
         {/* Invites, members, location timing and leaving all live in the group's settings. */}
-        <Button
-          title="Group settings"
-          size="small"
-          onPress={openSettings}
-          icon={<Ionicons name="settings-outline" size={17} color={colors.onAccent} />}
-        />
+        <Button title="Group settings" variant="secondary" size="small" onPress={openSettings} icon="settings" />
       </View>
 
       {/* Own line, under the heading and button, so it never wraps beside them. */}
@@ -55,13 +51,15 @@ export function PeoplePanel({ group, members, positions, now, meId, onSelect }: 
           onPress={() => (hiddenHere ? openSettings() : router.push('/setup'))}
           accessibilityRole="button"
           accessibilityHint={hiddenHere ? "Opens the group's settings" : 'Opens location sharing setup'}
-          style={styles.status}
+          style={({ pressed }) => [styles.status, { borderColor: colors.border, opacity: pressed ? 0.7 : 1 }]}
           hitSlop={8}>
           <View style={[styles.dot, { backgroundColor: dot }]} />
-          <Text style={[typeStyles.caption, { color: status.tone === 'attention' ? colors.text : colors.muted }]}>
+          <Text
+            style={[typeStyles.label, { color: status.tone === 'attention' ? colors.text : colors.muted }]}
+            numberOfLines={1}>
             {status.label}
           </Text>
-          {status.tone !== 'ok' && <Ionicons name="chevron-forward" size={14} color={colors.muted} />}
+          {status.tone !== 'ok' && <Icon name="chevron_right" size={18} color={colors.muted} />}
         </Pressable>
       )}
       {/* Full width: these can run to two lines. */}
@@ -103,10 +101,20 @@ export function PeoplePanel({ group, members, positions, now, meId, onSelect }: 
 }
 
 const styles = StyleSheet.create({
-  container: { gap: 14 },
+  container: { gap: 12 },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
   headerText: { flex: 1, gap: 2 },
-  status: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: -6 },
+  status: {
+    alignSelf: 'flex-start',
+    height: 32,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingLeft: 12,
+    paddingRight: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
   dot: { width: 8, height: 8, borderRadius: 4 },
   hint: { textAlign: 'center', lineHeight: 19 },
 });

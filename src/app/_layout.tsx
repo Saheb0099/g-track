@@ -1,19 +1,16 @@
-import {
-  Inter_400Regular,
-  Inter_500Medium,
-  Inter_600SemiBold,
-  Inter_700Bold,
-  Inter_800ExtraBold,
-  useFonts,
-} from '@expo-google-fonts/inter';
+import { MaterialSymbols_400Regular } from '@expo-google-fonts/material-symbols/400Regular';
+import { MaterialSymbols_400Regular_Filled } from '@expo-google-fonts/material-symbols/400Regular_Filled';
+import { Roboto_400Regular } from '@expo-google-fonts/roboto/400Regular';
+import { Roboto_500Medium } from '@expo-google-fonts/roboto/500Medium';
+import { useFonts } from 'expo-font';
 import { NavigationBar } from 'expo-navigation-bar';
 import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { useEffect } from 'react';
-import { LogBox, useColorScheme } from 'react-native';
+import { LogBox } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
-import { applySavedTheme } from '@/lib/appearance';
+import { applySavedTheme, useAppColorScheme } from '@/lib/appearance';
 import { AuthProvider, useAuth } from '@/lib/auth';
 import { QueryProvider } from '@/lib/query';
 
@@ -37,14 +34,14 @@ export default function RootLayout() {
 }
 
 function RootStack() {
-  const colorScheme = useColorScheme();
+  const colorScheme = useAppColorScheme();
   const { session, loading } = useAuth();
+  // Roboto for text and Material Symbols for icons.
   const [fontsLoaded, fontError] = useFonts({
-    Inter_400Regular,
-    Inter_500Medium,
-    Inter_600SemiBold,
-    Inter_700Bold,
-    Inter_800ExtraBold,
+    Roboto_400Regular,
+    Roboto_500Medium,
+    MaterialSymbols_400Regular,
+    MaterialSymbols_400Regular_Filled,
   });
   // A font that fails to load falls back to the system font rather than blocking the app.
   const ready = !loading && (fontsLoaded || !!fontError);

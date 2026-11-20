@@ -1,18 +1,18 @@
-import { Ionicons } from '@expo/vector-icons';
 import BottomSheet, { BottomSheetScrollView } from '@gorhom/bottom-sheet';
-import { BlurTargetView } from 'expo-blur';
 import { router, useFocusEffect, useIsFocused } from 'expo-router';
 import { NavigationBar } from 'expo-navigation-bar';
 import { StatusBar } from 'expo-status-bar';
-import { useCallback, useEffect, useRef, useState, type ComponentRef } from 'react';
-import { ActivityIndicator, BackHandler, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { ActivityIndicator, BackHandler, Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
+import Animated, { useAnimatedStyle, useSharedValue } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { Text } from '@/components/text';
 import { Avatar } from '@/components/avatar';
 import { Button } from '@/components/button';
-import { Glass, GlassTarget } from '@/components/glass';
-import { GlassButton } from '@/components/glass-button';
+import { Icon } from '@/components/icon';
 import { SheetArea, SheetBackground } from '@/components/sheet-background';
+import { CompassNeedle, Floating, MapButton } from '@/components/surface';
 import { MAX_MEMBERS, useMembers, useMyGroups } from '@/features/groups/api';
 import { useCurrentGroup } from '@/features/groups/current-group';
 import { takePendingInvite } from '@/features/groups/pending-invite';
@@ -29,9 +29,15 @@ import { type as typeStyles, useColors } from '@/lib/theme';
 
 /** "Updated 3 min ago" labels and faded markers are recomputed this often. */
 const CLOCK_TICK_MS = 30_000;
-/** Smallest sheet height: enough for the people header and a row, or a person's details. */
-const PEOPLE_PEEK = 190;
-const PERSON_PEEK = 300;
+/** Smallest sheet height (above the navigation bar): the people header and a row, or a person's details. */
+const PEOPLE_PEEK = 200;
+const PERSON_PEEK = 230;
+/** The sheet's grabber and the content's top padding, above the panel. */
+const SHEET_TOP = 28;
+/** How much of the gap below a lowered person's details shows (the gap is 12). */
+const PEEK_GAP = 8;
+/** The my-location button floats this far above the sheet's top edge. */
+const FAB_ABOVE_SHEET = 72;
 
 export default function Home() {
   const colors = useColors();
@@ -54,7 +60,8 @@ export default function Home() {
 
   const map = useRef<GroupMapHandle>(null);
   const sheet = useRef<BottomSheet>(null);
-  const blurTarget = useRef<ComponentRef<typeof View>>(null);
+  // Where the sheet's top edge is, so the my-location button can ride just above it.
+  const sheetTop = useSharedValue(height);
   // Selection and following belong to a group; switching groups leaves them behind.
   const groupId = group?.id;
   const [selection, setSelection] = useState<{ groupId?: string; userId: string | null }>({ userId: null });
@@ -65,6 +72,10 @@ export default function Home() {
   const setFollowId = (userId: string | null) => setFollowing({ groupId, userId });
 
   const [now, setNow] = useState(() => Date.now());
+  // How tall the selected person's details are, for the lowered sheet's height.
+  const [peek, setPeek] = useState<{ userId?: string; height: number }>({ height: 0 });
+  // The map's rotation, so the compass needle keeps pointing north.
+  const [bearing, setBearing] = useState(0);
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), CLOCK_TICK_MS);
     return () => clearInterval(timer);
@@ -104,12 +115,21 @@ export default function Home() {
   const myPosition =
     profile.data?.sharing_enabled && mine && now - Date.parse(mine.recordedAt) <= staleMs ? mine : undefined;
   const topBar = safe.top + 12;
-  // Sheet heights, measured in the area above the navigation bar. The person view needs more
-  // room than the people list; fully open stops just under the top bar.
-  const sheetBottom = safe.bottom + 8;
-  const sheetArea = height - sheetBottom;
-  const snapPoints = [selected ? PERSON_PEEK : PEOPLE_PEEK, Math.round(sheetArea * 0.52), sheetArea - (topBar + 64)];
-  const mapInsets = { top: topBar + 56, bottom: sheetBottom + sheetArea * 0.42 };
+  // Sheet heights, measured in the area above Android's navigation bar. The person view needs
+  // more room than the people list; fully open stops just under the top bar.
+  const sheetArea = height - safe.bottom;
+  // Lowered, a person's sheet ends just below their details, measured, before Today's path.
+  const personPeek = peek.userId === selected?.userId && peek.height ? SHEET_TOP + peek.height + PEEK_GAP : PERSON_PEEK;
+  const snapPoints = [selected ? personPeek : PEOPLE_PEEK, Math.round(sheetArea * 0.52), sheetArea - (topBar + 64)];
+  const mapInsets = { top: topBar + 56, bottom: height * 0.45 };
+  // Hidden once the sheet is pulled up close to the top bar.
+  const fabStyle = useAnimatedStyle(() => {
+    const top = sheetTop.get();
+    return {
+      opacity: top < topBar + 200 ? 0 : 1,
+      transform: [{ translateY: top - FAB_ABOVE_SHEET }],
+    };
+  });
 
   // Android Back steps back through what's open, like other apps: the person view first,
   // then a fully open sheet, and only then leaves the app.
@@ -139,132 +159,126 @@ export default function Home() {
           stays light in dark mode). Only while this screen is showing: screens opened over it
           follow the app's theme (root layout). */}
       {focused && <NavigationBar style={darkMap ? 'light' : 'dark'} />}
-      <BlurTargetView ref={blurTarget} style={StyleSheet.absoluteFill}>
-        <GroupMap
-          ref={map}
-          positions={positions}
-          members={members.data ?? []}
-          now={now}
-          meId={meId}
-          selectedId={selectedId}
-          onSelect={select}
-          insets={mapInsets}
-          staleMs={staleMs}
-          frameKey={groupId ?? 'solo'}
+      <GroupMap
+        ref={map}
+        positions={positions}
+        members={members.data ?? []}
+        now={now}
+        meId={meId}
+        selectedId={selectedId}
+        onSelect={select}
+        insets={mapInsets}
+        staleMs={staleMs}
+        frameKey={groupId ?? 'solo'}
+        onBearingChange={setBearing}
+      />
+
+      {/* Group switcher and profile, shaped like a search bar */}
+      <Floating radius={28} style={[styles.topBar, { top: topBar }]}>
+        <Pressable
+          onPress={() => router.push('/groups')}
+          accessibilityRole="button"
+          accessibilityLabel={group ? `Switch group, current group ${group.name}` : 'Your groups'}
+          style={({ pressed }) => [styles.groupButton, { opacity: pressed ? 0.7 : 1 }]}>
+          <View style={[styles.groupBadge, { backgroundColor: colors.accent }]}>
+            <Text style={[typeStyles.bodyStrong, { color: colors.onAccent, fontSize: 17 }]}>
+              {(group?.name ?? 'G')[0].toUpperCase()}
+            </Text>
+          </View>
+          <View style={styles.flex}>
+            <Text style={[typeStyles.bodyStrong, { color: colors.text, lineHeight: 22 }]} numberOfLines={1}>
+              {group?.name ?? 'G Track'}
+            </Text>
+            <Text style={[typeStyles.caption, { color: colors.muted, fontSize: 12, lineHeight: 16 }]} numberOfLines={1}>
+              {group
+                ? `${positions.length} of ${group.memberCount} sharing`
+                : groups.isPending
+                  ? 'Loading…'
+                  : 'No group yet'}
+            </Text>
+          </View>
+          <Icon name="arrow_drop_down" color={colors.muted} />
+        </Pressable>
+        <Pressable
+          onPress={() => router.push('/settings')}
+          accessibilityRole="button"
+          accessibilityLabel="Your settings"
+          hitSlop={4}
+          style={({ pressed }) => [styles.profile, { opacity: pressed ? 0.7 : 1 }]}>
+          <Avatar name={profile.data?.display_name ?? '?'} uri={profile.data?.avatar_url} size={34} />
+        </Pressable>
+      </Floating>
+
+      {/* Map controls */}
+      <View style={[styles.controls, { top: topBar + 72 }]}>
+        <MapButton icon="layers" accessibilityLabel="Map style" onPress={() => router.push('/map-style')} />
+        <MapButton icon="groups" accessibilityLabel="Show everyone" onPress={() => map.current?.showEveryone()} />
+        {/* The needle points north as the map turns; tapping turns the map back to north-up. */}
+        <MapButton
+          icon="navigation"
+          accessibilityLabel={bearing === 0 ? 'Map faces north' : 'Turn map to face north'}
+          onPress={() => map.current?.faceNorth()}>
+          <CompassNeedle bearing={bearing} />
+        </MapButton>
+      </View>
+      <Animated.View style={[styles.fab, fabStyle]} pointerEvents="box-none">
+        <MapButton
+          primary
+          icon="my_location"
+          accessibilityLabel="Go to my location"
+          onPress={() => meId && select(meId)}
         />
-      </BlurTargetView>
+      </Animated.View>
 
-      <GlassTarget.Provider value={blurTarget}>
-        {/* Group switcher and profile */}
-        <View style={[styles.topBar, { top: topBar }]}>
-          <Pressable
-            onPress={() => router.push('/groups')}
-            accessibilityRole="button"
-            accessibilityLabel={group ? `Switch group, current group ${group.name}` : 'Your groups'}
-            style={({ pressed }) => [styles.flex, { opacity: pressed ? 0.75 : 1 }]}>
-            <Glass radius={26} floating style={styles.groupPill}>
-              <View style={[styles.groupBadge, { backgroundColor: colors.accent }]}>
-                <Text style={[typeStyles.bodyStrong, { color: colors.onAccent, fontSize: 14 }]}>
-                  {(group?.name ?? 'G')[0].toUpperCase()}
-                </Text>
-              </View>
-              <View style={styles.flex}>
-                <Text style={[typeStyles.bodyStrong, { color: colors.text }]} numberOfLines={1}>
-                  {group?.name ?? 'G Track'}
-                </Text>
-                <Text style={[typeStyles.caption, { color: colors.muted, fontSize: 12 }]} numberOfLines={1}>
-                  {group
-                    ? `${positions.length} of ${group.memberCount} sharing`
-                    : groups.isPending
-                      ? 'Loading…'
-                      : 'No group yet'}
-                </Text>
-              </View>
-              <Ionicons name="chevron-down" size={18} color={colors.muted} />
-            </Glass>
-          </Pressable>
-          <GlassButton onPress={() => router.push('/settings')} accessibilityLabel="Your settings" size={52}>
-            <Avatar name={profile.data?.display_name ?? '?'} uri={profile.data?.avatar_url} size={38} />
-          </GlassButton>
-        </View>
-
-        {/* Map controls */}
-        <View style={[styles.controls, { top: topBar + 72 }]}>
-          <Glass radius={24} floating>
-            <Pressable
-              onPress={() => map.current?.showEveryone()}
-              accessibilityRole="button"
-              accessibilityLabel="Show everyone"
-              style={styles.control}>
-              <Ionicons name="people-outline" size={22} color={colors.text} />
-            </Pressable>
-            <View style={[styles.controlDivider, { backgroundColor: colors.border }]} />
-            <Pressable
-              onPress={() => meId && select(meId)}
-              accessibilityRole="button"
-              accessibilityLabel="Go to my location"
-              style={styles.control}>
-              <Ionicons name="navigate" size={20} color={colors.accent} />
-            </Pressable>
-            <View style={[styles.controlDivider, { backgroundColor: colors.border }]} />
-            <Pressable
-              onPress={() => router.push('/map-style')}
-              accessibilityRole="button"
-              accessibilityLabel="Map style"
-              style={styles.control}>
-              <Ionicons name="layers-outline" size={22} color={colors.text} />
-            </Pressable>
-          </Glass>
-        </View>
-
-        <SheetArea bottom={sheetBottom}>
-          <BottomSheet
-            ref={sheet}
-            index={1}
-            snapPoints={snapPoints}
-            enableDynamicSizing={false}
-            onChange={(index) => {
-              sheetIndex.current = index;
-            }}
-            backgroundComponent={SheetBackground}
-            handleIndicatorStyle={{ backgroundColor: colors.fill, width: 40, height: 5 }}>
-            <BottomSheetScrollView contentContainerStyle={styles.sheetContent}>
-              {groups.isPending ? (
-                <ActivityIndicator style={styles.loading} />
-              ) : groups.isError ? (
-                <Text style={[typeStyles.body, { color: colors.danger }]}>{friendlyError(groups.error)}</Text>
-              ) : !group ? (
-                <Welcome />
-              ) : selected ? (
-                <PersonPanel
-                  // A fresh panel per person, so an ask in progress doesn't carry over to someone else.
-                  key={selected.userId}
-                  groupId={group.id}
-                  member={selected}
-                  position={positions.find((p) => p.userId === selected.userId)}
-                  myPosition={myPosition}
-                  now={now}
-                  staleMs={staleMs}
-                  isYou={selected.userId === meId}
-                  following={followId === selected.userId}
-                  onToggleFollow={() => setFollowId(followId === selected.userId ? null : selected.userId)}
-                  onClose={() => select(null)}
-                  onFreshLocation={() => map.current?.focus(selected.userId)}
-                />
-              ) : (
-                <PeoplePanel
-                  group={group}
-                  members={members.data ?? []}
-                  positions={positions}
-                  now={now}
-                  meId={meId}
-                  onSelect={select}
-                />
-              )}
-            </BottomSheetScrollView>
-          </BottomSheet>
-        </SheetArea>
-      </GlassTarget.Provider>
+      <SheetArea bottom={safe.bottom}>
+        <BottomSheet
+          ref={sheet}
+          index={1}
+          snapPoints={snapPoints}
+          enableDynamicSizing={false}
+          animatedPosition={sheetTop}
+          onChange={(index) => {
+            sheetIndex.current = index;
+          }}
+          backgroundComponent={SheetBackground}
+          handleIndicatorStyle={{ backgroundColor: `${colors.muted}66`, width: 32, height: 4 }}>
+          <BottomSheetScrollView contentContainerStyle={styles.sheetContent}>
+            {groups.isPending ? (
+              <ActivityIndicator style={styles.loading} />
+            ) : groups.isError ? (
+              <Text style={[typeStyles.body, { color: colors.danger }]}>{friendlyError(groups.error)}</Text>
+            ) : !group ? (
+              <Welcome />
+            ) : selected ? (
+              <PersonPanel
+                // A fresh panel per person, so an ask in progress doesn't carry over to someone else.
+                key={selected.userId}
+                groupId={group.id}
+                member={selected}
+                position={positions.find((p) => p.userId === selected.userId)}
+                myPosition={myPosition}
+                now={now}
+                staleMs={staleMs}
+                isYou={selected.userId === meId}
+                following={followId === selected.userId}
+                onToggleFollow={() => setFollowId(followId === selected.userId ? null : selected.userId)}
+                onClose={() => select(null)}
+                onFreshLocation={() => map.current?.focus(selected.userId)}
+                onPeekHeight={(height) => setPeek({ userId: selected.userId, height: Math.round(height) })}
+              />
+            ) : (
+              <PeoplePanel
+                group={group}
+                members={members.data ?? []}
+                positions={positions}
+                now={now}
+                meId={meId}
+                onSelect={select}
+              />
+            )}
+          </BottomSheetScrollView>
+        </BottomSheet>
+      </SheetArea>
     </View>
   );
 }
@@ -287,13 +301,22 @@ function Welcome() {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   flex: { flex: 1 },
-  topBar: { position: 'absolute', left: 16, right: 16, flexDirection: 'row', alignItems: 'center', gap: 10 },
-  groupPill: { height: 52, flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 12 },
-  groupBadge: { width: 30, height: 30, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
-  controls: { position: 'absolute', right: 16 },
-  control: { width: 48, height: 48, alignItems: 'center', justifyContent: 'center' },
-  controlDivider: { height: StyleSheet.hairlineWidth, marginHorizontal: 10 },
-  sheetContent: { paddingHorizontal: 18, paddingTop: 4, paddingBottom: 24 },
+  topBar: {
+    position: 'absolute',
+    left: 16,
+    right: 16,
+    height: 56,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingLeft: 8,
+    paddingRight: 4,
+  },
+  groupButton: { flex: 1, height: 56, flexDirection: 'row', alignItems: 'center', gap: 12 },
+  groupBadge: { width: 40, height: 40, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
+  profile: { width: 48, height: 48, alignItems: 'center', justifyContent: 'center' },
+  controls: { position: 'absolute', right: 16, gap: 12 },
+  fab: { position: 'absolute', right: 16, top: 0 },
+  sheetContent: { paddingHorizontal: 16, paddingTop: 4, paddingBottom: 24 },
   loading: { marginTop: 24 },
   welcome: { gap: 12 },
 });

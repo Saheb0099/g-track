@@ -1,12 +1,14 @@
-import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useState } from 'react';
-import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { Text } from '@/components/text';
 import { Avatar } from '@/components/avatar';
 import { Button } from '@/components/button';
 import { Card, RowDivider, SectionLabel } from '@/components/card';
+import { Icon, type IconName } from '@/components/icon';
+import { Switch } from '@/components/switch';
 import { TextField } from '@/components/text-field';
 import { useSharingStatus } from '@/features/location/sharing-status';
 import { useChosenMapStyle } from '@/features/map/styles';
@@ -15,7 +17,7 @@ import { APP_VERSION, useUpdateAvailable } from '@/lib/app-version';
 import { setTheme, THEMES, useTheme, type Theme } from '@/lib/appearance';
 import { deleteAccount, signOut, useAuth } from '@/lib/auth';
 import { friendlyError } from '@/lib/errors';
-import { fonts, radius, type as typeStyles, useColors } from '@/lib/theme';
+import { radius, type as typeStyles, useColors } from '@/lib/theme';
 import { untilText } from '@/lib/time';
 
 const THEME_LABELS: Record<Theme, string> = { system: 'Automatic', light: 'Light', dark: 'Dark' };
@@ -86,13 +88,20 @@ export default function Settings() {
 
   return (
     <ScrollView
-      style={{ backgroundColor: colors.background }}
-      contentContainerStyle={[styles.container, { paddingBottom: safe.bottom + 32 }]}>
-      <View style={styles.profile}>
-        <Avatar name={name || '?'} uri={profile.data?.avatar_url} size={80} />
-        <Text style={[typeStyles.title, { color: colors.text }]}>{name}</Text>
-        <Text style={[typeStyles.caption, { color: colors.muted, fontSize: 14 }]}>{session?.user.email}</Text>
-      </View>
+      // Ends at Android's navigation bar, so nothing scrolls behind its buttons.
+      style={{ backgroundColor: colors.background, marginBottom: safe.bottom }}
+      contentContainerStyle={[styles.container, { paddingBottom: 32 }]}>
+      <Card style={styles.profile}>
+        <Avatar name={name || '?'} uri={profile.data?.avatar_url} size={64} />
+        <View style={styles.flex}>
+          <Text style={[typeStyles.heading, { color: colors.text, fontSize: 20 }]} numberOfLines={1}>
+            {name}
+          </Text>
+          <Text style={[typeStyles.caption, { color: colors.muted }]} numberOfLines={1}>
+            {session?.user.email}
+          </Text>
+        </View>
+      </Card>
 
       {profile.data && (
         <View style={styles.section}>
@@ -112,9 +121,7 @@ export default function Settings() {
         <SectionLabel>Location</SectionLabel>
         <Card>
           <View style={styles.row}>
-            <View style={[styles.icon, { backgroundColor: sharing ? colors.accentFill : colors.fill }]}>
-              <Ionicons name={sharing ? 'radio' : 'pause'} size={18} color={sharing ? colors.accent : colors.muted} />
-            </View>
+            <Lead icon={sharing ? 'share_location' : 'pause_circle'} on={sharing} />
             <View style={styles.flex}>
               <Text style={[typeStyles.bodyStrong, { color: colors.text }]}>Share my location</Text>
               <Text style={[typeStyles.caption, { color: colors.muted }]}>
@@ -128,23 +135,20 @@ export default function Settings() {
               onValueChange={toggleSharing}
               disabled={!profile.data}
               accessibilityLabel="Share my location"
-              trackColor={{ true: colors.accent, false: colors.fill }}
-              thumbColor="#FFFFFF"
             />
           </View>
-          <RowDivider inset={62} />
+          <RowDivider />
           <Pressable
             onPress={() => router.push('/setup')}
             accessibilityRole="button"
-            style={({ pressed }) => [styles.row, { opacity: pressed ? 0.6 : 1 }]}>
-            <View style={[styles.icon, { backgroundColor: colors.accentFill }]}>
-              <Ionicons name="navigate" size={18} color={colors.accent} />
-            </View>
+            android_ripple={{ color: `${colors.text}14` }}
+            style={styles.row}>
+            <Lead icon="verified_user" on={status?.tone === 'ok'} good />
             <View style={styles.flex}>
               <Text style={[typeStyles.bodyStrong, { color: colors.text }]}>Permissions and battery</Text>
               <Text style={[typeStyles.caption, { color: colors.muted }]}>{status?.label ?? 'Checking…'}</Text>
             </View>
-            <Ionicons name="chevron-forward" size={18} color={colors.muted} />
+            <Icon name="chevron_right" color={colors.muted} />
           </Pressable>
         </Card>
       </View>
@@ -153,14 +157,12 @@ export default function Settings() {
         <SectionLabel>Appearance</SectionLabel>
         <Card>
           <View style={styles.row}>
-            <View style={[styles.icon, { backgroundColor: colors.accentFill }]}>
-              <Ionicons name="contrast" size={18} color={colors.accent} />
-            </View>
+            <Lead icon="contrast" />
             <Text style={[typeStyles.bodyStrong, styles.flex, { color: colors.text }]}>Theme</Text>
           </View>
-          {/* Automatic follows the phone's own light or dark setting. */}
-          <View style={[styles.segments, { backgroundColor: colors.fill }]} accessibilityRole="radiogroup">
-            {THEMES.map((choice) => {
+          {/* Material's segmented button. Automatic follows the phone's own light or dark setting. */}
+          <View style={styles.segments} accessibilityRole="radiogroup">
+            {THEMES.map((choice, i) => {
               const active = choice === theme;
               return (
                 <Pressable
@@ -168,37 +170,56 @@ export default function Settings() {
                   onPress={() => setTheme(choice)}
                   accessibilityRole="radio"
                   accessibilityState={{ checked: active }}
-                  style={[styles.segment, active && { backgroundColor: colors.surface }]}>
-                  <Text
-                    style={[
-                      typeStyles.caption,
-                      { color: active ? colors.text : colors.muted, fontFamily: active ? fonts.bold : fonts.medium },
-                    ]}>
+                  style={[
+                    styles.segment,
+                    { borderColor: colors.outline, backgroundColor: active ? colors.tonal : 'transparent' },
+                    i === 0 && styles.segmentFirst,
+                    i === THEMES.length - 1 && styles.segmentLast,
+                    i > 0 && styles.segmentNext,
+                  ]}>
+                  {active && <Icon name="check" size={18} color={colors.onStrong} />}
+                  <Text style={[typeStyles.label, { color: active ? colors.onStrong : colors.text }]}>
                     {THEME_LABELS[choice]}
                   </Text>
                 </Pressable>
               );
             })}
           </View>
-          <RowDivider inset={62} />
+          <RowDivider />
           <Pressable
             onPress={() => router.push('/map-style')}
             accessibilityRole="button"
-            style={({ pressed }) => [styles.row, { opacity: pressed ? 0.6 : 1 }]}>
-            <View style={[styles.icon, { backgroundColor: colors.accentFill }]}>
-              <Ionicons name="layers" size={18} color={colors.accent} />
-            </View>
+            android_ripple={{ color: `${colors.text}14` }}
+            style={styles.row}>
+            <Lead icon="map" />
             <View style={styles.flex}>
               <Text style={[typeStyles.bodyStrong, { color: colors.text }]}>Map style</Text>
               <Text style={[typeStyles.caption, { color: colors.muted }]}>{mapStyle.name}</Text>
             </View>
-            <Ionicons name="chevron-forward" size={18} color={colors.muted} />
+            <Icon name="chevron_right" color={colors.muted} />
           </Pressable>
         </Card>
       </View>
 
+      <Card>
+        <Pressable
+          onPress={() => router.push('/about')}
+          accessibilityRole="button"
+          android_ripple={{ color: `${colors.text}14` }}
+          style={styles.row}>
+          <Lead icon="info" />
+          <View style={styles.flex}>
+            <Text style={[typeStyles.bodyStrong, { color: colors.text }]}>About G Track</Text>
+            <Text style={[typeStyles.caption, { color: colors.muted }]}>
+              Version {APP_VERSION}, map credits, privacy policy
+            </Text>
+          </View>
+          <Icon name="chevron_right" color={colors.muted} />
+        </Pressable>
+      </Card>
+
       <View style={styles.account}>
-        <Button title="Sign out" variant="secondary" onPress={signOut} disabled={deleting} />
+        <Button title="Sign out" variant="outlined" icon="logout" onPress={signOut} disabled={deleting} />
         <Pressable
           onPress={confirmDelete}
           disabled={deleting}
@@ -213,15 +234,24 @@ export default function Settings() {
         </Pressable>
       </View>
 
-      <View style={styles.version}>
-        <Text style={[typeStyles.caption, { color: colors.muted }]}>G Track {APP_VERSION}</Text>
-        {update && (
-          <Text style={[typeStyles.caption, { color: colors.accentText, textAlign: 'center' }]}>
-            Version {update} is out. Ask the friend who shared G Track for the new file.
-          </Text>
-        )}
-      </View>
+      {update && (
+        <Text style={[typeStyles.caption, { color: colors.accentText, textAlign: 'center' }]}>
+          Version {update} is out. Ask the friend who shared G Track for the new file.
+        </Text>
+      )}
     </ScrollView>
+  );
+}
+
+/** The round icon at the start of a settings row; `good` turns it green when on. */
+function Lead({ icon, on = true, good = false }: { icon: IconName; on?: boolean; good?: boolean }) {
+  const colors = useColors();
+  const bg = !on ? colors.fill : good ? colors.successFill : colors.tonal;
+  const fg = !on ? colors.muted : good ? colors.onSuccessFill : colors.onTonal;
+  return (
+    <View style={[styles.icon, { backgroundColor: bg }]}>
+      <Icon name={icon} size={22} filled={on} color={fg} />
+    </View>
   );
 }
 
@@ -254,29 +284,39 @@ function NameForm({ current, saving, onSave }: { current: string; saving: boolea
 
 const styles = StyleSheet.create({
   nameRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
-  saveButton: { height: 54, borderRadius: 16, marginTop: 29 },
-  container: { padding: 16, gap: 24, paddingBottom: 48 },
-  profile: { alignItems: 'center', gap: 6, paddingVertical: 12 },
+  saveButton: { marginTop: 12 },
+  container: { padding: 16, gap: 20, paddingBottom: 48 },
+  profile: { flexDirection: 'row', alignItems: 'center', gap: 16, padding: 16 },
   section: { gap: 8 },
   row: {
-    minHeight: 64,
+    minHeight: 72,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
+    gap: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
   },
   icon: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  flex: { flex: 1, gap: 2 },
-  segments: { flexDirection: 'row', marginHorizontal: 14, marginBottom: 14, padding: 3, borderRadius: radius.pill },
+  flex: { flex: 1 },
+  segments: { flexDirection: 'row', marginHorizontal: 16, marginBottom: 16 },
   account: { gap: 8 },
-  version: { alignItems: 'center', gap: 4 },
   delete: { height: 48, alignItems: 'center', justifyContent: 'center' },
-  segment: { flex: 1, height: 36, alignItems: 'center', justifyContent: 'center', borderRadius: radius.pill },
+  segment: {
+    flex: 1,
+    height: 40,
+    flexDirection: 'row',
+    gap: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+  },
+  segmentFirst: { borderTopLeftRadius: radius.pill, borderBottomLeftRadius: radius.pill },
+  segmentLast: { borderTopRightRadius: radius.pill, borderBottomRightRadius: radius.pill },
+  segmentNext: { marginLeft: -1 },
 });

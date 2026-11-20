@@ -1,27 +1,35 @@
 import { Ionicons } from '@expo/vector-icons';
-import { Camera, Map } from '@maplibre/maplibre-react-native';
-import { BlurTargetView } from 'expo-blur';
 import { StatusBar } from 'expo-status-bar';
-import { useRef, useState, type ComponentRef } from 'react';
-import { Linking, StyleSheet, Text, useColorScheme, View } from 'react-native';
+import { useState } from 'react';
+import { ActivityIndicator, Linking, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { Button } from '@/components/button';
-import { Glass, GlassTarget } from '@/components/glass';
+import { Text } from '@/components/text';
+import { avatarColors } from '@/components/avatar';
+import { Icon } from '@/components/icon';
 import { useRememberInvite } from '@/features/groups/pending-invite';
-import { useMapStyle } from '@/features/map/styles';
+import { useAppColorScheme } from '@/lib/appearance';
 import { signInWithGoogle } from '@/lib/auth';
 import { friendlyError } from '@/lib/errors';
-import { fonts, radius, type as typeStyles, useColors } from '@/lib/theme';
+import { PRIVACY_URL } from '@/lib/links';
+import { type as typeStyles, useColors } from '@/lib/theme';
 
-const PRIVACY_URL = 'https://saheb0099.github.io/g-track-site/privacy.html';
+/** Where the friends sit on the illustration: offset in the 300 pt shape, size, and a name for the colour. */
+const FRIENDS = [
+  { left: 72, top: 64, size: 56, seed: 'b' },
+  { left: 196, top: 56, size: 48, seed: 'c' },
+  { left: 58, top: 186, size: 44, seed: 'd' },
+];
+/** The shape behind them: a circle with eight scallops. */
+const SCALLOPS = Array.from({ length: 8 }, (_, i) => {
+  const angle = (i / 8) * 2 * Math.PI - Math.PI / 2;
+  return { left: 110 + Math.cos(angle) * 110, top: 110 + Math.sin(angle) * 110 };
+});
 
 export default function SignIn() {
   const colors = useColors();
-  const dark = useColorScheme() === 'dark';
+  const dark = useAppColorScheme() === 'dark';
   const safe = useSafeAreaInsets();
-  const mapStyle = useMapStyle();
-  const blurTarget = useRef<ComponentRef<typeof View>>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   useRememberInvite();
@@ -40,61 +48,129 @@ export default function SignIn() {
   }
 
   return (
-    <View style={styles.container}>
+    <ScrollView
+      style={{ backgroundColor: colors.background }}
+      contentContainerStyle={[styles.container, { paddingTop: safe.top + 32, paddingBottom: safe.bottom + 24 }]}>
       <StatusBar style={dark ? 'light' : 'dark'} />
-      {/* A still map as the backdrop; it isn't interactive. */}
-      <BlurTargetView ref={blurTarget} style={StyleSheet.absoluteFill} pointerEvents="none">
-        <Map style={StyleSheet.absoluteFill} mapStyle={mapStyle} logo={false} attribution={false} androidView="texture">
-          <Camera initialViewState={{ center: [78.9, 22.6], zoom: 4.2 }} />
-        </Map>
-      </BlurTargetView>
 
-      <GlassTarget.Provider value={blurTarget}>
-        <View style={[styles.cardWrap, { paddingBottom: safe.bottom + 16 }]}>
-          <Glass radius={radius.sheet} floating style={styles.card}>
-            <View style={styles.brand}>
-              <View style={[styles.logo, { backgroundColor: colors.accent }]}>
-                <Ionicons name="location" size={28} color={colors.onAccent} />
-              </View>
-              <Text style={[styles.wordmark, { color: colors.text }]}>G Track</Text>
+      {/* Friends gathered on a soft shape: decoration only. */}
+      <View style={styles.art} accessible={false} importantForAccessibility="no-hide-descendants">
+        <View style={[styles.blob, { backgroundColor: colors.accentFill }]} />
+        {SCALLOPS.map((p, i) => (
+          <View key={i} style={[styles.scallop, { left: p.left, top: p.top, backgroundColor: colors.accentFill }]} />
+        ))}
+        {FRIENDS.map((f) => {
+          const [bg, fg] = avatarColors(f.seed, dark);
+          return (
+            <View
+              key={f.seed}
+              style={[
+                styles.friend,
+                {
+                  left: f.left,
+                  top: f.top,
+                  width: f.size,
+                  height: f.size,
+                  backgroundColor: bg,
+                  borderColor: colors.surface,
+                },
+              ]}>
+              <Icon name="location_on" size={f.size * 0.45} filled color={fg} />
             </View>
-            <View style={styles.copy}>
-              <Text style={[typeStyles.heading, { color: colors.text }]}>Your friends, on one map.</Text>
-              <Text style={[typeStyles.body, { color: colors.muted }]}>
-                See where everyone is and where they&apos;ve been this week. Only people in your groups can see you.
-              </Text>
-            </View>
-            <Button
-              title="Continue with Google"
-              variant="strong"
-              loading={busy}
-              onPress={onPress}
-              style={styles.google}
-              icon={<Ionicons name="logo-google" size={18} color={colors.onStrong} />}
-            />
-            {error && <Text style={[typeStyles.caption, styles.center, { color: colors.danger }]}>{error}</Text>}
-            <Text
-              style={[typeStyles.caption, styles.center, styles.link, { color: colors.muted }]}
-              onPress={() => Linking.openURL(PRIVACY_URL)}
-              accessibilityRole="link">
-              Privacy policy
-            </Text>
-          </Glass>
+          );
+        })}
+        <View
+          style={[
+            styles.friend,
+            { left: 176, top: 160, width: 64, height: 64, backgroundColor: colors.accent, borderColor: colors.surface },
+          ]}>
+          <Icon name="my_location" size={28} color={colors.onAccent} />
         </View>
-      </GlassTarget.Provider>
-    </View>
+      </View>
+
+      <View style={styles.copy}>
+        <View style={styles.brand}>
+          <View style={[styles.logo, { backgroundColor: colors.accent }]}>
+            <Icon name="location_on" size={22} filled color={colors.onAccent} />
+          </View>
+          <Text style={[typeStyles.heading, { color: colors.text, fontSize: 20 }]}>G Track</Text>
+        </View>
+        <Text style={[styles.headline, { color: colors.text }]}>Your friends, on one map.</Text>
+        <Text style={[typeStyles.body, { color: colors.muted }]}>
+          See where everyone is and where they&apos;ve been this week. Only people in your groups can see you.
+        </Text>
+      </View>
+
+      <View style={styles.actions}>
+        <Pressable
+          onPress={onPress}
+          disabled={busy}
+          accessibilityRole="button"
+          accessibilityState={{ busy }}
+          android_ripple={{ color: `${colors.onAccent}33`, foreground: true }}
+          style={[styles.google, { backgroundColor: colors.accent }]}>
+          {busy ? (
+            <ActivityIndicator color={colors.onAccent} />
+          ) : (
+            <>
+              <View style={styles.g}>
+                <Ionicons name="logo-google" size={16} color="#355CA8" />
+              </View>
+              <Text style={[typeStyles.button, { color: colors.onAccent, fontSize: 16 }]}>Continue with Google</Text>
+            </>
+          )}
+        </Pressable>
+        {error && <Text style={[typeStyles.caption, styles.center, { color: colors.danger }]}>{error}</Text>}
+        <Text
+          style={[typeStyles.caption, styles.center, styles.link, { color: colors.accentText, fontSize: 12 }]}
+          onPress={() => Linking.openURL(PRIVACY_URL)}
+          accessibilityRole="link">
+          Privacy policy
+        </Text>
+      </View>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
-  cardWrap: { flex: 1, justifyContent: 'flex-end', paddingHorizontal: 16 },
-  card: { padding: 22, paddingTop: 26, gap: 18 },
-  brand: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  logo: { width: 52, height: 52, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
-  wordmark: { fontFamily: fonts.extrabold, fontSize: 30, letterSpacing: -0.6 },
-  copy: { gap: 6 },
-  google: { height: 56, borderRadius: 28 },
+  container: { flexGrow: 1, paddingHorizontal: 24, gap: 32 },
+  art: { width: 300, height: 300, alignSelf: 'center' },
+  blob: { position: 'absolute', left: 38, top: 38, width: 224, height: 224, borderRadius: 112 },
+  scallop: { position: 'absolute', width: 80, height: 80, borderRadius: 40 },
+  friend: {
+    position: 'absolute',
+    borderRadius: 999,
+    borderWidth: 3,
+    alignItems: 'center',
+    justifyContent: 'center',
+    elevation: 3,
+    shadowColor: '#000',
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 2 },
+  },
+  copy: { flex: 1, gap: 12 },
+  brand: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  logo: { width: 36, height: 36, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  headline: { ...typeStyles.title, fontSize: 36, lineHeight: 44 },
+  actions: { gap: 16 },
+  google: {
+    height: 56,
+    borderRadius: 28,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    overflow: 'hidden',
+  },
+  g: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   center: { textAlign: 'center' },
   link: { textDecorationLine: 'underline' },
 });

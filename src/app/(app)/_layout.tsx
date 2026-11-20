@@ -23,7 +23,7 @@ export default function AppLayout() {
       screenOptions={{
         headerShadowVisible: false,
         headerStyle: { backgroundColor: colors.background },
-        headerTitleStyle: { fontFamily: fonts.bold, fontSize: 18 },
+        headerTitleStyle: { fontFamily: fonts.medium, fontSize: 22 },
         headerTintColor: colors.text,
         contentStyle: { backgroundColor: colors.background },
       }}>
@@ -35,6 +35,7 @@ export default function AppLayout() {
       <Stack.Screen name="group/[id]/settings" options={{ headerShown: false, presentation: 'modal' }} />
       <Stack.Screen name="settings" options={{ title: 'Settings', presentation: 'modal' }} />
       <Stack.Screen name="map-style" options={{ title: 'Map style', presentation: 'modal' }} />
+      <Stack.Screen name="about" options={{ title: 'About', presentation: 'modal' }} />
       <Stack.Screen name="setup" options={{ title: 'Location sharing', presentation: 'modal' }} />
       <Stack.Screen name="create-group" options={{ title: 'New group', presentation: 'modal' }} />
       <Stack.Screen name="join/index" options={{ title: 'Join a group', presentation: 'modal' }} />

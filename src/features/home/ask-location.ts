@@ -13,7 +13,7 @@ const ANSWER_WAIT_MS = 60_000;
 /** "Got a fresh location" stays this long, then the button comes back. */
 const DONE_SHOWN_MS = 5_000;
 /** The server's wait between asks to the same person (request_location), counted down here. */
-const ASK_AGAIN_MS = 2 * 60_000;
+export const ASK_AGAIN_MS = 2 * 60_000;
 
 // When this phone last asked each person, so the countdown survives closing the card or the app.
 const askedKey = (userId: string) => `gtrack.asked.${userId}`;

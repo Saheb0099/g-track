@@ -1,7 +1,8 @@
 import { router } from 'expo-router';
 import { useRef, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
+import { Text } from '@/components/text';
 import { Button } from '@/components/button';
 import { TextField } from '@/components/text-field';
 import { MAX_MEMBERS, useCreateGroup } from '@/features/groups/api';

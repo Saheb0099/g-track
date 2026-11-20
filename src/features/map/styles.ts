@@ -1,7 +1,7 @@
 import type { StyleSpecification } from '@maplibre/maplibre-react-native';
-import { useColorScheme } from 'react-native';
 
 import { storedSetting } from '@/lib/stored-setting';
+import { useAppColorScheme } from '@/lib/appearance';
 
 // Every map here is free and needs no key or account. The OpenStreetMap website also offers
 // Cycle Map, Transport Map and Tracestrack, but those need a signed-up API key, so they're left out.
@@ -26,6 +26,14 @@ export const MAP_STYLES = [
     source: 'OpenFreeMap',
     light: 'https://tiles.openfreemap.org/styles/liberty',
     dark: 'https://tiles.openfreemap.org/styles/dark',
+  },
+  {
+    id: 'voyager',
+    name: 'Voyager',
+    source: 'CARTO',
+    credit: '© CARTO',
+    light: 'https://basemaps.cartocdn.com/gl/voyager-gl-style/style.json',
+    dark: 'https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json',
   },
   {
     id: 'colorful',
@@ -82,6 +90,8 @@ export const MAP_STYLES = [
   light: string | StyleSpecification;
   /** Used in dark mode; styles without one stay light. */
   dark?: string;
+  /** Shown on the map after OpenStreetMap's credit, when the provider asks for its own. */
+  credit?: string;
 }[];
 
 export type MapStyle = (typeof MAP_STYLES)[number];
@@ -94,16 +104,17 @@ const chosen = storedSetting<MapStyleId>(
 );
 
 export const setMapStyle = chosen.set;
+const useChosenId = chosen.use;
 
 /** The map style you picked. */
 export function useChosenMapStyle(): MapStyle {
-  const id = chosen.use();
+  const id = useChosenId();
   return MAP_STYLES.find((s) => s.id === id) ?? MAP_STYLES[0];
 }
 
 /** What to draw for a style in the current light or dark mode. */
 export function useStyleFor(style: MapStyle): string | StyleSpecification {
-  const dark = useColorScheme() === 'dark';
+  const dark = useAppColorScheme() === 'dark';
   return dark && 'dark' in style ? style.dark : style.light;
 }
 
@@ -115,5 +126,5 @@ export function useMapStyle() {
 /** Whether the map on screen is dark, so the status bar icons over it can stay readable. */
 export function useMapIsDark() {
   const style = useChosenMapStyle();
-  return useColorScheme() === 'dark' && 'dark' in style;
+  return useAppColorScheme() === 'dark' && 'dark' in style;
 }

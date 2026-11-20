@@ -1,91 +1,129 @@
-import { useColorScheme, type TextStyle } from 'react-native';
+import type { TextStyle } from 'react-native';
 
-// Design tokens for the Liquid Glass look (see the "G Track redesign" mock-up).
+import { useAppColorScheme } from '@/lib/appearance';
+
+// Material 3 colour roles from a blue seed (see the "G Track Material 3" design canvas).
+// The older names (accent, muted, fill…) are kept as plain aliases used across the app.
 
 const light = {
-  /** Screens that aren't over the map. */
-  background: '#F6F7FA',
-  /** Cards and grouped lists inside sheets. */
+  /** Screens and the map's bottom sheet. */
+  background: '#F3F3FA',
+  /** List groups and cards on a screen or sheet. */
   surface: '#FFFFFF',
-  /** Frosted panels floating over the map. */
-  glass: 'rgba(250,251,253,0.78)',
-  glassBorder: 'rgba(255,255,255,0.75)',
-  text: '#0E1116',
-  muted: '#4A5260',
-  border: 'rgba(14,17,22,0.08)',
-  /** Quiet buttons, chips, the sheet grabber. */
-  fill: 'rgba(14,17,22,0.07)',
-  accent: '#1E6BFF',
-  accentText: '#0B4FD6',
-  accentFill: 'rgba(30,107,255,0.12)',
+  /** Bars and buttons floating over the map (surface container). */
+  glass: '#ECEDF4',
+  glassBorder: 'transparent',
+  surfaceHighest: '#E2E2E9',
+  text: '#1A1B20',
+  muted: '#44464F',
+  /** Outline variant: dividers and quiet borders. */
+  border: '#C5C6D0',
+  /** Outline: outlined buttons, text fields. */
+  outline: '#757780',
+  /** Quiet fills: the sheet grabber, unselected chips, idle switch tracks. */
+  fill: '#E2E2E9',
+  accent: '#355CA8',
+  accentText: '#355CA8',
   onAccent: '#FFFFFF',
-  /** High-emphasis dark button (sign in, selected day). */
-  strong: '#0E1116',
-  onStrong: '#FFFFFF',
-  danger: '#B02E0C',
-  dangerFill: 'rgba(217,72,15,0.1)',
-  success: '#1F9D55',
-  warning: '#D9480F',
-  shadow: '#0E1116',
+  /** Primary container. */
+  accentFill: '#D9E2FF',
+  onAccentFill: '#1A438F',
+  /** Secondary container: tonal buttons, selected chips. */
+  tonal: '#DBE2F9',
+  onTonal: '#3F4759',
+  /** Kept for older call sites: the selected/on state of a tonal control. */
+  strong: '#DBE2F9',
+  onStrong: '#141B2C',
+  danger: '#BA1A1A',
+  dangerFill: '#FFDAD6',
+  onDangerFill: '#93000A',
+  success: '#2E7D32',
+  successFill: '#C4EED0',
+  onSuccessFill: '#0F5223',
+  warning: '#B95000',
+  shadow: '#000000',
 };
 
 const dark: typeof light = {
-  background: '#0B0D10',
-  surface: '#1A1D22',
-  glass: 'rgba(24,27,32,0.8)',
-  glassBorder: 'rgba(255,255,255,0.08)',
-  text: '#F2F4F7',
-  muted: '#A3AAB5',
-  border: 'rgba(255,255,255,0.08)',
-  fill: 'rgba(255,255,255,0.09)',
-  accent: '#4C8DFF',
-  accentText: '#8DB6FF',
-  accentFill: 'rgba(76,141,255,0.16)',
-  onAccent: '#FFFFFF',
-  strong: '#F2F4F7',
-  onStrong: '#0E1116',
-  danger: '#FF8A65',
-  dangerFill: 'rgba(255,138,101,0.12)',
-  success: '#3DD17A',
-  warning: '#FF9F43',
+  background: '#17181D',
+  surface: '#26282D',
+  glass: '#26282D',
+  glassBorder: 'transparent',
+  surfaceHighest: '#33353A',
+  text: '#E2E2E9',
+  muted: '#C5C6D0',
+  border: '#44464F',
+  outline: '#8F9099',
+  fill: '#33353A',
+  accent: '#B0C6FF',
+  accentText: '#B0C6FF',
+  onAccent: '#002D6E',
+  accentFill: '#1A438F',
+  onAccentFill: '#D9E2FF',
+  tonal: '#3F4759',
+  onTonal: '#DBE2F9',
+  strong: '#3F4759',
+  onStrong: '#DBE2F9',
+  danger: '#FFB4AB',
+  dangerFill: '#93000A',
+  onDangerFill: '#FFDAD6',
+  success: '#8CD98F',
+  successFill: '#1E4D2B',
+  onSuccessFill: '#B7F1BD',
+  warning: '#FFB77C',
   shadow: '#000000',
 };
 
 export type Colors = typeof light;
 
 export function useColors(): Colors {
-  return useColorScheme() === 'dark' ? dark : light;
+  return useAppColorScheme() === 'dark' ? dark : light;
 }
 
-/** Loaded in the root layout (@expo-google-fonts/inter). */
+/**
+ * Roboto, bundled and loaded in the root layout (@expo-google-fonts/roboto). Android's own
+ * "sans-serif" isn't always Roboto: some phone makers (Vivo, Xiaomi…) swap in their own font.
+ */
+const roboto = 'Roboto_400Regular';
+const robotoMedium = 'Roboto_500Medium';
+
 export const fonts = {
-  regular: 'Inter_400Regular',
-  medium: 'Inter_500Medium',
-  semibold: 'Inter_600SemiBold',
-  bold: 'Inter_700Bold',
-  extrabold: 'Inter_800ExtraBold',
+  regular: roboto,
+  medium: robotoMedium,
+  semibold: robotoMedium,
+  bold: robotoMedium,
+  extrabold: robotoMedium,
 };
 
+const medium = { fontFamily: robotoMedium } as const;
+
+/** The Material 3 type scale, by what each style is used for. */
 export const type = {
-  title: { fontFamily: fonts.extrabold, fontSize: 26, letterSpacing: -0.4 },
-  heading: { fontFamily: fonts.extrabold, fontSize: 22, letterSpacing: -0.3 },
-  bodyStrong: { fontFamily: fonts.bold, fontSize: 16 },
-  body: { fontFamily: fonts.regular, fontSize: 15, lineHeight: 22 },
-  caption: { fontFamily: fonts.medium, fontSize: 13 },
-  label: { fontFamily: fonts.bold, fontSize: 13, letterSpacing: 0.4 },
-  button: { fontFamily: fonts.bold, fontSize: 16 },
+  /** Headline: screen titles, a person's name. */
+  title: { ...medium, fontSize: 28, lineHeight: 36 },
+  /** Title large: sheet headings. */
+  heading: { ...medium, fontSize: 22, lineHeight: 28 },
+  /** Title medium: list item headlines. */
+  bodyStrong: { ...medium, fontSize: 16, lineHeight: 24, letterSpacing: 0.15 },
+  /** Body large. */
+  body: { fontFamily: roboto, fontSize: 16, lineHeight: 24 },
+  /** Body medium: supporting text. */
+  caption: { fontFamily: roboto, fontSize: 14, lineHeight: 20 },
+  /** Label large: section labels. */
+  label: { ...medium, fontSize: 14, lineHeight: 20, letterSpacing: 0.1 },
+  button: { ...medium, fontSize: 15, letterSpacing: 0.1 },
 } satisfies Record<string, TextStyle>;
 
 /** Corner radii. */
-export const radius = { sheet: 34, card: 22, tile: 18, pill: 999 };
+export const radius = { sheet: 28, card: 20, tile: 16, field: 8, pill: 999 };
 
-/** Soft drop shadow for floating glass. */
+/** Elevation for bars and buttons floating over the map. */
 export function floatShadow(colors: Colors) {
   return {
     shadowColor: colors.shadow,
-    shadowOpacity: 0.14,
-    shadowRadius: 18,
-    shadowOffset: { width: 0, height: 8 },
-    elevation: 6,
+    shadowOpacity: 0.18,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 3,
   };
 }

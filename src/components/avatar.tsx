@@ -1,20 +1,58 @@
 import { Image } from 'expo-image';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
+import { Text } from '@/components/text';
+import { useAppColorScheme } from '@/lib/appearance';
 import { fonts } from '@/lib/theme';
 
-// Initials avatars get a stable colour per person, so friends are easy to tell apart.
-const COLORS = ['#1E6BFF', '#E8590C', '#7048E8', '#0CA678', '#D6336C', '#1098AD', '#F59F00', '#5C7CFA'];
+// Initials avatars get a stable tonal colour per person, so friends are easy to tell apart:
+// [container, text] in light mode, then the dark-mode pair.
+const PAIRS: [light: [string, string], dark: [string, string]][] = [
+  [
+    ['#D9E2FF', '#1A438F'],
+    ['#1A438F', '#D9E2FF'],
+  ],
+  [
+    ['#FDD7FA', '#593D59'],
+    ['#593D59', '#FDD7FA'],
+  ],
+  [
+    ['#CDEDA3', '#354E16'],
+    ['#354E16', '#CDEDA3'],
+  ],
+  [
+    ['#FFDBC9', '#723600'],
+    ['#723600', '#FFDBC9'],
+  ],
+  [
+    ['#BEEAF6', '#004E5C'],
+    ['#004E5C', '#BEEAF6'],
+  ],
+  [
+    ['#EADDFF', '#4F378B'],
+    ['#4F378B', '#EADDFF'],
+  ],
+  [
+    ['#FFE08B', '#574500'],
+    ['#574500', '#FFE08B'],
+  ],
+  [
+    ['#FFDAD6', '#8C1D18'],
+    ['#8C1D18', '#FFDAD6'],
+  ],
+];
 
-export function avatarColor(name: string) {
+/** A person's avatar colours: [background, text]. */
+export function avatarColors(name: string, dark: boolean): [string, string] {
   let hash = 0;
   for (const ch of name) hash = (hash * 31 + ch.charCodeAt(0)) >>> 0;
-  return COLORS[hash % COLORS.length];
+  return PAIRS[hash % PAIRS.length][dark ? 1 : 0];
 }
 
 type Props = { name: string; uri?: string | null; size?: number; dim?: boolean };
 
-export function Avatar({ name, uri, size = 42, dim = false }: Props) {
+export function Avatar({ name, uri, size = 40, dim = false }: Props) {
+  const [background, text] = avatarColors(name, useAppColorScheme() === 'dark');
   const box = { width: size, height: size, borderRadius: size / 2, opacity: dim ? 0.55 : 1 };
 
   if (uri) {
@@ -29,13 +67,13 @@ export function Avatar({ name, uri, size = 42, dim = false }: Props) {
     .join('');
 
   return (
-    <View style={[styles.fallback, box, { backgroundColor: avatarColor(name) }]} accessibilityLabel={name}>
-      <Text style={[styles.initials, { fontSize: size * 0.38 }]}>{initials || '?'}</Text>
+    <View style={[styles.fallback, box, { backgroundColor: background }]} accessibilityLabel={name}>
+      <Text style={[styles.initials, { fontSize: size * 0.4, color: text }]}>{initials || '?'}</Text>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   fallback: { alignItems: 'center', justifyContent: 'center' },
-  initials: { fontFamily: fonts.extrabold, color: '#FFFFFF' },
+  initials: { fontFamily: fonts.medium },
 });

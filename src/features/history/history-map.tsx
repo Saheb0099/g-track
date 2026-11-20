@@ -4,6 +4,7 @@ import { StyleSheet, View } from 'react-native';
 
 import { usable, type HistoryPoint, type Stay } from '@/features/history/timeline';
 import { boundsAround } from '@/features/map/geo';
+import { MapCredit } from '@/features/map/map-credit';
 import { useMapStyle } from '@/features/map/styles';
 import { useColors } from '@/lib/theme';
 
@@ -68,58 +69,61 @@ export const HistoryMap = forwardRef<HistoryMapHandle, Props>(function HistoryMa
   const end = path.at(-1);
 
   return (
-    <Map
-      style={StyleSheet.absoluteFill}
-      mapStyle={mapStyle}
-      logo={false}
-      compass={false}
-      // The OpenStreetMap credit must stay visible: below the floating controls, clear of the sheet.
-      attributionPosition={{ top: insets.top + 8, left: 16 }}
-      // Texture rendering lets the frosted panels blur the map behind them.
-      androidView="texture"
-      onDidFinishLoadingMap={() => setLoaded(true)}>
-      <Camera ref={camera} initialViewState={{ center: [0, 20], zoom: 1 }} />
+    <>
+      <Map
+        style={StyleSheet.absoluteFill}
+        mapStyle={mapStyle}
+        logo={false}
+        compass={false}
+        // The credit is our own label below (MapCredit), in place of MapLibre's (i) button.
+        attribution={false}
+        androidView="texture"
+        onDidFinishLoadingMap={() => setLoaded(true)}>
+        <Camera ref={camera} initialViewState={{ center: [0, 20], zoom: 1 }} />
 
-      {coords.length > 1 && (
-        <GeoJSONSource id="path" data={line}>
+        {coords.length > 1 && (
+          <GeoJSONSource id="path" data={line}>
+            <Layer
+              type="line"
+              id="path-line"
+              paint={{ 'line-color': colors.accent, 'line-width': 5, 'line-opacity': 0.9 }}
+              layout={{ 'line-join': 'round', 'line-cap': 'round' }}
+            />
+          </GeoJSONSource>
+        )}
+
+        <GeoJSONSource id="stays" data={dots}>
           <Layer
-            type="line"
-            id="path-line"
-            paint={{ 'line-color': colors.accent, 'line-width': 5, 'line-opacity': 0.9 }}
-            layout={{ 'line-join': 'round', 'line-cap': 'round' }}
+            type="circle"
+            id="stay-dots"
+            paint={{
+              'circle-radius': 8,
+              'circle-color': '#FFFFFF',
+              'circle-stroke-color': colors.accent,
+              'circle-stroke-width': 4,
+            }}
           />
         </GeoJSONSource>
-      )}
 
-      <GeoJSONSource id="stays" data={dots}>
-        <Layer
-          type="circle"
-          id="stay-dots"
-          paint={{
-            'circle-radius': 8,
-            'circle-color': '#FFFFFF',
-            'circle-stroke-color': colors.accent,
-            'circle-stroke-width': 4,
-          }}
-        />
-      </GeoJSONSource>
-
-      {start && (
-        <Marker id="start" lngLat={[start.lng, start.lat]} anchor="center">
-          <View style={[styles.pin, { backgroundColor: colors.success }]} />
-        </Marker>
-      )}
-      {end && path.length > 1 && (
-        <Marker id="end" lngLat={[end.lng, end.lat]} anchor="center">
-          <View style={[styles.pin, { backgroundColor: colors.warning }]} />
-        </Marker>
-      )}
-      {selected && (
-        <Marker id="selected" lngLat={[selected.lng, selected.lat]} anchor="center">
-          <View style={[styles.selected, { borderColor: colors.accent }]} />
-        </Marker>
-      )}
-    </Map>
+        {start && (
+          <Marker id="start" lngLat={[start.lng, start.lat]} anchor="center">
+            <View style={[styles.pin, { backgroundColor: colors.success }]} />
+          </Marker>
+        )}
+        {end && path.length > 1 && (
+          <Marker id="end" lngLat={[end.lng, end.lat]} anchor="center">
+            <View style={[styles.pin, { backgroundColor: colors.warning }]} />
+          </Marker>
+        )}
+        {selected && (
+          <Marker id="selected" lngLat={[selected.lng, selected.lat]} anchor="center">
+            <View style={[styles.selected, { borderColor: colors.accent }]} />
+          </Marker>
+        )}
+      </Map>
+      {/* The OpenStreetMap credit must stay visible: below the floating controls, clear of the sheet. */}
+      <MapCredit top={insets.top + 8} />
+    </>
   );
 });
 
