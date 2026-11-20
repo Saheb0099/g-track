@@ -7,6 +7,7 @@ import {
 import type { Session } from '@supabase/supabase-js';
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 
+import { forgetPushToken } from '@/features/location/push';
 import { resetTracking } from '@/features/location/tracking';
 import { queryClient } from '@/lib/query';
 import { supabase } from '@/lib/supabase';
@@ -93,6 +94,8 @@ export async function signInWithGoogle(): Promise<'signed-in' | 'cancelled'> {
 }
 
 export async function signOut() {
+  // While still signed in: friends' asks stop reaching this phone for this account.
+  await forgetPushToken().catch(() => {});
   // Forget the Google account too, so the picker shows next time.
   await GoogleSignin.signOut().catch(() => {});
   // Clears the stored session even when offline; the SIGNED_OUT event then clears cached data.

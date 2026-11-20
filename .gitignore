@@ -45,3 +45,6 @@ example
 # local native module build output
 modules/*/android/build/
 modules/*/android/.gradle/
+
+# Firebase app config: each copy of G Track makes its own (see README)
+google-services.json

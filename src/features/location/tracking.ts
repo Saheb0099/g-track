@@ -6,11 +6,13 @@ import * as TaskManager from 'expo-task-manager';
 
 import GtrackAlarm from '../../../modules/gtrack-alarm';
 
+import { showRequestNotice } from '@/features/location/push';
 import { clearAll, enqueue, getState, logEvent, setState, type PendingPoint } from '@/features/location/queue';
 import {
   clockMovedBack,
   DEFAULT_SCHEDULE,
   judgeFix,
+  nextHeld,
   saveDueMs,
   scheduleFor,
   shouldSave,
@@ -163,6 +165,15 @@ function toPoint(
   };
 }
 
+type ReadingOptions = {
+  source?: PendingPoint['source'];
+  /** Save even if no point is due yet (the app was opened, a check-in, a friend asked). */
+  force?: boolean;
+  /** A forced save still skips a reading this soon after the last saved point (default 1 min). */
+  minGapMs?: number;
+  battery?: number | null;
+};
+
 // Readings come from the location task, the alarm and the app at once, and each reads and
 // writes the tracker state (last good fix, last saved point). One at a time, so two can't both
 // decide a point is due and save twice.
@@ -174,7 +185,7 @@ let recording: Promise<unknown> = Promise.resolve();
  */
 export function recordReading(
   location: Location.LocationObject,
-  options: { source?: PendingPoint['source']; force?: boolean; battery?: number | null } = {},
+  options: ReadingOptions = {},
 ): Promise<{ saved: boolean; verdict: Verdict }> {
   const next = recording.then(() => recordReadingNow(location, options));
   recording = next.catch(() => {});
@@ -183,7 +194,7 @@ export function recordReading(
 
 async function recordReadingNow(
   location: Location.LocationObject,
-  options: { source?: PendingPoint['source']; force?: boolean; battery?: number | null },
+  options: ReadingOptions,
 ): Promise<{ saved: boolean; verdict: Verdict }> {
   const fix: Fix = {
     lat: location.coords.latitude,
@@ -195,7 +206,7 @@ async function recordReadingNow(
   const [lastGood, held] = await Promise.all([getState<Fix>('last_good'), getState<Fix>('held_jump')]);
   const { verdict, reason, trip, keepHeld } = judgeFix(lastGood, held, fix);
   if (verdict !== 'accept') {
-    if (verdict === 'hold') await setState('held_jump', fix);
+    if (verdict === 'hold') await setState('held_jump', nextHeld(held, fix));
     await logEvent(`${verdict} fix: ${reason}`);
     return { saved: false, verdict };
   }
@@ -215,7 +226,7 @@ async function recordReadingNow(
   const last = await getState<Fix>('last_saved');
   // A forced save (the app was just opened) still skips a reading within a minute of the last one.
   const keep = options.force
-    ? !last || fix.time - last.time >= 60_000 || clockMovedBack(last, fix)
+    ? !last || fix.time - last.time >= (options.minGapMs ?? 60_000) || clockMovedBack(last, fix)
     : shouldSave(last, fix, await getSchedule());
   if (!keep) return { saved: false, verdict };
 
@@ -272,7 +283,7 @@ async function freshFix(accuracy: Location.Accuracy, timeoutMs: number, label: s
  * With `stillHere`, a cached fix of any age is re-sent with the current time: Google's provider
  * stops producing fixes while the phone lies still, so the last fix is where the phone still is.
  */
-export async function recordCurrentPosition(options: { stillHere?: boolean } = {}) {
+export async function recordCurrentPosition(options: { stillHere?: boolean; minGapMs?: number } = {}) {
   // A jump waiting to be confirmed may be the start of a trip. Re-sending an older position as
   // "now" could then show someone still at the station, so older fixes aren't re-stamped and the
   // last good one isn't repeated; a short "last seen" gap is better than a wrong place.
@@ -287,7 +298,11 @@ export async function recordCurrentPosition(options: { stillHere?: boolean } = {
     // that's still where the phone is, so it's saved as of now rather than skipped as a repeat.
     const stale = Date.now() - fresh.timestamp > STALE_FIX_MS;
     const reading = stale && restamp(fresh.timestamp) ? { ...fresh, timestamp: Date.now() } : fresh;
-    const { saved, verdict } = await recordReading(reading, { force: true, source: stale ? 'last_known' : 'fused' });
+    const { saved, verdict } = await recordReading(reading, {
+      force: true,
+      minGapMs: options.minGapMs,
+      source: stale ? 'last_known' : 'fused',
+    });
     await logEvent(
       `${attempt.label} fix ±${Math.round(fresh.coords.accuracy ?? 0)}m stale=${stale} ${verdict} saved=${saved}`,
     );
@@ -298,7 +313,11 @@ export async function recordCurrentPosition(options: { stillHere?: boolean } = {
   const cached = await Location.getLastKnownPositionAsync(options.stillHere ? {} : { maxAge: LAST_KNOWN_MAX_AGE_MS });
   if (cached) {
     const reading = restamp(cached.timestamp) ? { ...cached, timestamp: Date.now() } : cached;
-    const { saved, verdict } = await recordReading(reading, { source: 'last_known', force: true });
+    const { saved, verdict } = await recordReading(reading, {
+      source: 'last_known',
+      force: true,
+      minGapMs: options.minGapMs,
+    });
     await logEvent(`cached fix from ${new Date(cached.timestamp).toISOString()} ${verdict} saved=${saved}`);
     if (verdict === 'accept') return;
   } else {
@@ -438,6 +457,37 @@ export async function checkIn(reason: 'alarm' | 'heartbeat') {
     UPLOAD_STEP_MS,
     `${reason}: upload`,
   );
+}
+
+/** A point this soon after the last one already answers a friend's ask, so it isn't repeated. */
+const ANSWER_MIN_GAP_MS = 10_000;
+
+/**
+ * A friend asked for this phone's location right now ("Get location now"): if sharing is on,
+ * say so in a notification, then save and upload a fresh point. Runs in the background.
+ */
+export async function answerLocationRequest(from: string) {
+  const check = { allowed: 'unknown' as Allowed };
+  await withTimeout(
+    sharingAllowed().then((allowed) => {
+      check.allowed = allowed;
+    }),
+    ALLOWED_STEP_MS,
+    'ask: checking sharing',
+  );
+  // The server already refuses asks while paused; this covers a pause it hasn't heard of yet.
+  if (check.allowed !== 'yes') {
+    await logEvent(`ask from ${from}: not sharing (${check.allowed}); not answered`);
+    return;
+  }
+  await logEvent(`ask from ${from}: answering`);
+  await showRequestNotice(from).catch((e) => logEvent(`ask notice failed: ${errorMessage(e)}`));
+  await withTimeout(
+    recordCurrentPosition({ stillHere: true, minGapMs: ANSWER_MIN_GAP_MS }),
+    POINT_STEP_MS,
+    'ask: saving point',
+  );
+  await withTimeout(flushQueue(), UPLOAD_STEP_MS, 'ask: upload');
 }
 
 type Allowed = 'yes' | 'signed_out' | 'paused' | 'paused_for_now' | 'unknown';

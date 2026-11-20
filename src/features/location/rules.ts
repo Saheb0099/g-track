@@ -96,6 +96,24 @@ export type Judgement = {
   keepHeld?: boolean;
 };
 
+/**
+ * Two fixes on the same spot, within the rougher one's own error. Indoors a phone may only ever
+ * get rough Wi-Fi/cell fixes (often ±200 m, every one); a glitch jumps away and back instead.
+ */
+function samePlace(a: Fix, b: Fix): boolean {
+  return distanceMeters(a, b) <= Math.max(a.accuracy ?? MAX_ACCURACY_M, b.accuracy ?? MAX_ACCURACY_M);
+}
+
+/**
+ * Which fix to keep waiting after a 'hold': the one already waiting while new fixes agree with
+ * it, so the time since it grows and a later fix can confirm it. Replacing it with every new fix
+ * (they arrive each minute) would keep it forever under the 2 minutes a confirmation needs.
+ */
+export function nextHeld(held: Fix | null, next: Fix): Fix {
+  if (!held || clockMovedBack(held, next) || next.time - held.time > GOOD_FIX_TRUST_MS) return next;
+  return samePlace(held, next) ? held : next;
+}
+
 /** Steady movement on from the waiting fix, at a believable speed and further from where it began. */
 function movesOn(lastGood: Fix | null, held: Fix | null, next: Fix, acc: number): boolean {
   if (!lastGood || !held || next.time - held.time < TRIP_STEP_MS) return false;
@@ -131,6 +149,10 @@ export function judgeFix(lastGoodFix: Fix | null, heldFix: Fix | null, next: Fix
   if (!lastGood || next.time - lastGood.time > GOOD_FIX_TRUST_MS) {
     if (acc <= PRECISE_M) return { verdict: 'accept', reason: 'precise first fix' };
     if (confirmsHeld) return { verdict: 'accept', reason: 'first fix confirmed by a second fix' };
+    // Indoors, rough fixes may be all there is; minutes apart on the same spot, that's where it is.
+    if (held && next.time - held.time >= CONFIRM_AFTER_MS && samePlace(held, next)) {
+      return { verdict: 'accept', reason: 'rough first fix confirmed by a second on the same spot' };
+    }
     if (movesOn(lastGood, held, next, acc)) {
       return { verdict: 'accept', reason: 'moving on from a waiting fix', trip: true, keepHeld: true };
     }

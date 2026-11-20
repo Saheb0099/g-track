@@ -31,6 +31,11 @@ A free location-sharing app for a circle of friends. Android first.
 - [X] Pause for 1 hour, 8 hours or until turned back on
 - [X] Stop sharing with one group only
 - [X] Today's distance on each person's card
+- [X] Get location now: wakes a friend's phone for a fresh position, with a notice on their phone
+
+### Fixes
+
+- [X] Indoors after a gap, rough Wi-Fi/cell fixes that agree are now saved (before, nothing was until a GPS fix)
 
 ### Security
 
@@ -55,11 +60,10 @@ A free location-sharing app for a circle of friends. Android first.
 
 ## Upcoming features
 
-These need the server to send alerts to phones (Google's free notification service).
+These use the phone wake-ups (Firebase Cloud Messaging) that Get location now set up.
 
 - [ ] **Arrival alerts:** save places like Home or College and get "your friend reached Home"
 - [ ] **SOS button:** one tap sends your location and an alert to the whole group
-- [ ] **Ask for a fresh location:** get a friend's position right now, not up to 5 minutes old
 
 ## Later
 

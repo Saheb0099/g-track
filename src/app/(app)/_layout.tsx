@@ -1,6 +1,7 @@
 import { Stack } from 'expo-router';
 
 import { useMarkLinkHandled } from '@/features/groups/pending-invite';
+import { usePushToken } from '@/features/location/push';
 import { useTracking } from '@/features/location/use-tracking';
 import { useRestoreAccount } from '@/features/profile/api';
 import { fonts, useColors } from '@/lib/theme';
@@ -14,6 +15,8 @@ export default function AppLayout() {
   useRestoreAccount();
   // While signed in, keep location sharing in step with permissions and the sharing switch.
   useTracking();
+  // So friends' "Get location now" can reach this phone.
+  usePushToken();
 
   return (
     <Stack

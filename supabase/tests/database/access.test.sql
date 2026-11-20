@@ -560,10 +560,59 @@ select throws_ok($$ select 1 from private.group_hidden_periods $$, '42501', null
   'Users cannot read the hidden times');
 reset role;
 
+-- ---------------------------------------------------------------------------
+-- Asking for a fresh location
+-- ---------------------------------------------------------------------------
+
+-- Erin and Frank share a group again (Frank rejoined above); Gina and Frank share another.
+select tests.login_as(tests.erin());
+select is(public.request_location(tests.frank()), 'Erin', 'You can ask a friend for their location');
+select throws_ok($$ select public.request_location(tests.frank()) $$, 'asked_recently',
+  'Asking the same friend again within 2 minutes is refused');
+select throws_ok($$ select public.request_location(tests.erin()) $$, 'cannot_ask_self', 'You cannot ask yourself');
+select throws_ok($$ select public.request_location(tests.uid('carol')) $$, 'not_sharing',
+  'You cannot ask someone outside your groups');
+reset role;
+update private.location_requests set created_at = now() - interval '3 minutes' where requester_id = tests.erin();
+select tests.login_as(tests.erin());
+select lives_ok($$ select public.request_location(tests.frank()) $$, 'After 2 minutes you can ask again');
+
+reset role;
+update public.profiles set sharing_enabled = false where id = tests.frank();
+select tests.login_as(tests.gina());
+select throws_ok($$ select public.request_location(tests.frank()) $$, 'not_sharing', 'You cannot ask someone who paused');
+reset role;
+update public.profiles set sharing_enabled = true where id = tests.frank();
+update public.group_members set hidden_at = now() where group_id = tests.get('g3')::uuid and user_id = tests.frank();
+select tests.login_as(tests.gina());
+select throws_ok($$ select public.request_location(tests.frank()) $$, 'not_sharing',
+  'You cannot ask someone who stopped sharing with your group');
+reset role;
+update public.group_members set hidden_at = null where group_id = tests.get('g3')::uuid and user_id = tests.frank();
+
+select tests.login_as(tests.frank());
+select lives_ok($$ select public.save_push_token('frank-phone-token-0123456789') $$, 'A phone saves its token');
+select throws_ok($$ select public.save_push_token('short') $$, 'invalid_token', 'A malformed token is refused');
+select throws_ok($$ select 1 from public.push_tokens $$, '42501', null, 'Users cannot read phone tokens');
+select throws_ok($$ select 1 from private.location_requests $$, '42501', null, 'Users cannot read who asked whom');
+select tests.login_as(tests.erin());
+select lives_ok($$ select public.save_push_token('frank-phone-token-0123456789') $$,
+  'A phone that changes hands saves its token for the new account');
+select tests.login_as(tests.frank());
+select lives_ok($$ select public.remove_push_token('frank-phone-token-0123456789') $$,
+  'Removing a token you no longer own does nothing');
+reset role;
+select is((select user_id from public.push_tokens where token = 'frank-phone-token-0123456789'), tests.erin(),
+  'The token belongs to the phone''s new account');
+select is((select schedule from cron.job where jobname = 'delete-old-location-requests'), '20 * * * *',
+  'Old asks and unused tokens are cleaned up hourly');
+
 set local role anon;
 select throws_ok($$ select public.create_group('Anon') $$, '42501', null, 'Signed-out users cannot call functions');
 select throws_ok($$ select 1 from public.locations $$, '42501', null, 'Signed-out users cannot read locations');
 select throws_ok($$ select 1 from public.app_config $$, '42501', null, 'Signed-out users cannot read the app version');
+select throws_ok($$ select public.request_location(gen_random_uuid()) $$, '42501', null,
+  'Signed-out users cannot ask for a location');
 reset role;
 
 select * from finish();

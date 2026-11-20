@@ -10,11 +10,16 @@ const MESSAGES: Record<string, string> = {
   member_leaving: "That person's account is being deleted, so they can't be admin.",
   group_closing: "This group is being deleted, so it can't take new members.",
   too_many_tries: 'Too many wrong codes. Try again in an hour.',
+  asked_recently: 'You asked a moment ago. Try again in 2 minutes.',
+  not_sharing: "They aren't sharing their location with you right now.",
+  cannot_ask_self: "That's you.",
+  send_failed: "Couldn't send the request just now. Try again in a minute.",
 };
 
-// How a dropped or missing connection shows up: from fetch, Android's networking and Supabase.
+// How a dropped or missing connection shows up: from fetch, Android's networking and Supabase
+// (its edge functions say "Failed to send a request").
 const OFFLINE =
-  /network request failed|failed to fetch|fetch failed|unable to resolve host|unknownhost|network is unreachable|timed? ?out|connection (refused|reset)/i;
+  /network request failed|failed to fetch|fetch failed|failed to send a request|unable to resolve host|unknownhost|network is unreachable|timed? ?out|connection (refused|reset)/i;
 
 /** The raw text of any error: an Error, a Supabase error object, or anything else. */
 export function errorMessage(error: unknown): string {

@@ -12,6 +12,7 @@
     },
     "android": {
       "package": "com.sahebbeshra.gtrack",
+      "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
@@ -58,10 +59,7 @@
           "android": {
             "enableMinifyInReleaseBuilds": false,
             "enableShrinkResourcesInReleaseBuilds": false,
-            "buildArchs": [
-              "arm64-v8a",
-              "armeabi-v7a"
-            ],
+            "buildArchs": ["arm64-v8a", "armeabi-v7a"],
             "useLegacyPackaging": true
           }
         }
@@ -72,6 +70,12 @@
         "expo-navigation-bar",
         {
           "enforceContrast": false
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/notification-icon.png"
         }
       ]
     ],

@@ -4,7 +4,7 @@
 //
 //   npm run test:rules
 
-import { distanceMeters, judgeFix, shouldSave } from '../src/features/location/rules.ts';
+import { distanceMeters, judgeFix, nextHeld, shouldSave } from '../src/features/location/rules.ts';
 
 const HOME = { lat: 22.5726, lng: 88.3639 };
 const MIN = 60_000;
@@ -21,7 +21,7 @@ function track(fixes) {
   const believed = [];
   for (const fix of fixes) {
     const { verdict, trip, keepHeld } = judgeFix(lastGood, held, fix);
-    if (verdict === 'hold') held = fix;
+    if (verdict === 'hold') held = nextHeld(held, fix);
     if (verdict !== 'accept') continue;
     if (keepHeld && held) believed.push(held);
     believed.push(fix);
@@ -110,6 +110,40 @@ for (const [name, kmh, acc] of [
     { checkEveryMs: MIN, saveEveryMs: 5 * MIN },
   );
   check('A reading 5 s older than the last is still skipped', !saves);
+}
+
+// Indoors after a long gap (a pause, a restart): rough Wi-Fi/cell fixes may be all there is.
+{
+  // ±200 m every minute, jittering a little around one spot, with no recent good fix.
+  const fixes = [];
+  for (let t = 0; t <= 10; t++) fixes.push({ ...east(HOME, ((t % 3) - 1) * 0.05), time: t * MIN, accuracy: 200 });
+  const kept = track(fixes);
+  const firstAt = kept.length ? kept[0].time / MIN : null;
+  check(
+    'Indoors after a gap, ±200 m fixes every minute',
+    kept.length >= 8 && firstAt !== null && firstAt <= 3,
+    `${kept.length} of ${fixes.length} kept, first at minute ${firstAt}`,
+  );
+}
+{
+  // Rough fixes that never agree (hopping 2 km between towers) are still not believed.
+  const fixes = [];
+  for (let t = 0; t <= 10; t++) fixes.push({ ...east(HOME, t % 2 ? 2 : 0), time: t * MIN, accuracy: 200 });
+  check('Rough fixes that keep disagreeing after a gap', track(fixes).length === 0, `${track(fixes).length} kept`);
+}
+{
+  // A rough glitch far away for a minute, then rough fixes at home: home is believed, not the glitch.
+  const fixes = [
+    { ...east(HOME, 5), time: 0, accuracy: 200 },
+    ...Array.from({ length: 6 }, (_, i) => ({ ...HOME, time: (i + 1) * MIN, accuracy: 200 })),
+  ];
+  const kept = track(fixes);
+  const far = kept.filter((f) => distanceMeters(HOME, f) > 1000).length;
+  check(
+    'A rough glitch, then rough fixes at home, after a gap',
+    kept.length > 0 && far === 0,
+    `${kept.length} kept, ${far} far`,
+  );
 }
 
 // Known limit, reported rather than checked: a glitch that drifts steadily away looks like a trip.

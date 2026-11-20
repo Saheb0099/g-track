@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useMemo } from 'react';
-import { Linking, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Linking, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { Avatar } from '@/components/avatar';
 import { Button } from '@/components/button';
@@ -9,6 +9,7 @@ import { StatTile } from '@/components/card';
 import type { Member } from '@/features/groups/api';
 import { statusLine } from '@/features/groups/member-row';
 import { useDayHistory, useRecentDays } from '@/features/history/api';
+import { useAskForLocation } from '@/features/home/ask-location';
 import { buildTimeline, formatDistance, travelledM } from '@/features/history/timeline';
 import { distanceMeters } from '@/features/location/rules';
 import type { LivePosition } from '@/features/map/api';
@@ -29,6 +30,8 @@ type Props = {
   following: boolean;
   onToggleFollow: () => void;
   onClose: () => void;
+  /** Their phone answered "Get location now": show them on the map. */
+  onFreshLocation: () => void;
 };
 
 /** The sheet with one person selected: how fresh their location is, and quick actions. */
@@ -43,8 +46,14 @@ export function PersonPanel({
   following,
   onToggleFollow,
   onClose,
+  onFreshLocation,
 }: Props) {
   const colors = useColors();
+  const ask = useAskForLocation(member, position, onFreshLocation);
+  // Only people whose live position you may see can be asked (the server checks this too).
+  const canAsk = !isYou && member.sharingEnabled && !member.deletedAt;
+  const asking = ask.phase === 'asking';
+  const answered = ask.phase === 'done';
   const today = useRecentDays()[0];
   const history = useDayHistory(member.userId, today);
 
@@ -119,6 +128,27 @@ export function PersonPanel({
         />
       )}
 
+      {canAsk && (
+        <View style={styles.ask}>
+          <Button
+            title={asking ? 'Asking…' : answered ? 'Got a fresh location' : 'Get location now'}
+            variant="secondary"
+            disabled={asking || answered}
+            onPress={ask.ask}
+            icon={
+              asking ? (
+                <ActivityIndicator size="small" color={colors.text} />
+              ) : (
+                <Ionicons name={answered ? 'checkmark-circle' : 'refresh'} size={18} color={colors.text} />
+              )
+            }
+          />
+          {ask.message && (
+            <Text style={[typeStyles.caption, styles.askNote, { color: colors.muted }]}>{ask.message}</Text>
+          )}
+        </View>
+      )}
+
       <View style={styles.actions}>
         <Button
           title="Today's path"
@@ -165,5 +195,7 @@ const styles = StyleSheet.create({
   close: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
   tiles: { flexDirection: 'row', gap: 8 },
   actions: { flexDirection: 'row', gap: 10 },
+  ask: { gap: 8 },
+  askNote: { textAlign: 'center', lineHeight: 19 },
   flex: { flex: 1 },
 });

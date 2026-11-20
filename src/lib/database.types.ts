@@ -265,6 +265,32 @@ export type Database = {
         }
         Relationships: []
       }
+      push_tokens: {
+        Row: {
+          token: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          token: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          token?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "push_tokens_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
@@ -296,12 +322,15 @@ export type Database = {
         }[]
       }
       regenerate_invite_code: { Args: { p_group_id: string }; Returns: string }
+      remove_push_token: { Args: { p_token: string }; Returns: undefined }
       rename_group: {
         Args: { p_group_id: string; p_name: string }
         Returns: undefined
       }
+      request_location: { Args: { p_user_id: string }; Returns: string }
       restore_group: { Args: { p_group_id: string }; Returns: boolean }
       restore_my_account: { Args: never; Returns: boolean }
+      save_push_token: { Args: { p_token: string }; Returns: undefined }
       set_group_timing: {
         Args: {
           p_check_every_min: number

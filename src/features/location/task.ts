@@ -1,14 +1,17 @@
 import * as BackgroundTask from 'expo-background-task';
 import * as Battery from 'expo-battery';
 import type { LocationObject } from 'expo-location';
+import * as Notifications from 'expo-notifications';
 import * as TaskManager from 'expo-task-manager';
 import { AppRegistry } from 'react-native';
 
 import { TICK_TASK } from '../../../modules/gtrack-alarm';
 
+import { LOCATION_REQUEST_TASK, readLocationRequest } from '@/features/location/push';
 import { logEvent } from '@/features/location/queue';
 import { errorMessage } from '@/lib/errors';
 import {
+  answerLocationRequest,
   checkIn,
   HEARTBEAT_TASK,
   LOCATION_TASK,
@@ -54,3 +57,15 @@ TaskManager.defineTask(HEARTBEAT_TASK, async () => {
     return BackgroundTask.BackgroundTaskResult.Failed;
   }
 });
+
+// A friend tapped "Get location now": a Firebase data message, delivered even when the app is
+// closed (see the request-location edge function).
+TaskManager.defineTask<Notifications.NotificationTaskPayload>(LOCATION_REQUEST_TASK, async ({ data }) => {
+  const request = readLocationRequest(data);
+  if (!request) {
+    await logEvent(`push message that isn't an ask: ${JSON.stringify(data).slice(0, 300)}`).catch(() => {});
+    return;
+  }
+  await answerLocationRequest(request.from).catch((e) => logEvent(`ask failed: ${errorMessage(e)}`).catch(() => {}));
+});
+Notifications.registerTaskAsync(LOCATION_REQUEST_TASK).catch(() => {});

@@ -237,6 +237,8 @@ export default function Home() {
                 <Welcome />
               ) : selected ? (
                 <PersonPanel
+                  // A fresh panel per person, so an ask in progress doesn't carry over to someone else.
+                  key={selected.userId}
                   groupId={group.id}
                   member={selected}
                   position={positions.find((p) => p.userId === selected.userId)}
@@ -247,6 +249,7 @@ export default function Home() {
                   following={followId === selected.userId}
                   onToggleFollow={() => setFollowId(followId === selected.userId ? null : selected.userId)}
                   onClose={() => select(null)}
+                  onFreshLocation={() => map.current?.focus(selected.userId)}
                 />
               ) : (
                 <PeoplePanel

@@ -6,6 +6,7 @@ A free location-sharing app for a circle of friends. Android first.
 - Location every few minutes, even with the app closed or after a restart
 - Groups of up to 10; only the admin invites, removes and deletes
 - Pause for a set time, or stop sharing with one group only
+- Get a friend's location right now, with a notice on their phone
 - Google sign-in, OpenStreetMap maps, no ads
 
 There's no ready-made app to download: you set up your own copy with the guide below. Everything
@@ -16,6 +17,7 @@ it uses has a free plan. See [ROADMAP.md](ROADMAP.md) for what's done and what's
 - Expo (React Native) with Expo Router, TypeScript and TanStack Query
 - Supabase: Postgres with row-level security, Realtime, scheduled jobs (pg_cron)
 - Google sign-in
+- Firebase Cloud Messaging, only to wake a friend's phone for "Get location now"
 - MapLibre with OpenFreeMap and OpenStreetMap tiles
 - A small native Android module (`modules/gtrack-alarm`) for exact 5-minute wake-ups
 
@@ -23,9 +25,9 @@ it uses has a free plan. See [ROADMAP.md](ROADMAP.md) for what's done and what's
 
 ## Setup guide
 
-About an hour the first time. You'll make three free accounts (Supabase, Google Cloud, and
-GitHub if you don't have it), build the app on your computer and install it on your phone by
-cable.
+About an hour the first time. You'll make a few free accounts (Supabase, Google Cloud with
+Firebase, and GitHub if you don't have it), build the app on your computer and install it on
+your phone by cable.
 
 ### 1. What you need
 
@@ -129,7 +131,29 @@ In Supabase: **Authentication → Sign In / Providers → Google**.
 - **Client Secret:** paste the secret.
 - Leave **Skip nonce check** off and save.
 
-### 5. Settings file
+### 5. Firebase (for "Get location now")
+
+A friend's card has **Get location now**, which wakes their phone to send where it is right
+away. Waking a phone takes Google's free notification service, Firebase Cloud Messaging.
+Supabase stays the database; Firebase only delivers the wake-up.
+
+1. At <https://console.firebase.google.com>, **create a project** (Google Analytics can stay off).
+2. Click the **Android** icon to add an app, with your package name from step 2. Skip the
+   optional fields. Download **google-services.json** into the `g-track` folder, next to
+   `app.json`. It's ignored by git.
+3. In **Project settings → Service accounts**, click **Generate new private key**. This file is
+   a real secret: keep it outside the project (for example `~/.gtrack/`), never commit it.
+4. Give it to Supabase and deploy the function that sends wake-ups:
+
+   ```bash
+   npx supabase secrets set FIREBASE_SERVICE_ACCOUNT="$(cat ~/.gtrack/firebase-service-account.json)"
+   npx supabase functions deploy request-location --no-verify-jwt
+   ```
+
+The app won't build without `google-services.json`. Everything else works without the rest of
+this step; only Get location now needs it.
+
+### 6. Settings file
 
 Copy the example and fill in the three values from steps 3 and 4d:
 
@@ -146,7 +170,7 @@ EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID=1234567890-abc.apps.googleusercontent.com
 `.env.local` is ignored by git. These values end up inside the app anyway (they're meant to
 be public); the database's access rules are what keep data private.
 
-### 6. Build and install on your phone
+### 7. Build and install on your phone
 
 1. On the phone, turn on **Developer options** (Settings → About phone → tap _Build number_
    7 times), then turn on **USB debugging**.
@@ -174,7 +198,7 @@ need `npx expo run:android` again.
 > The dev build loads its code from your computer, so it stops sharing when the phone is away
 > from it or after a restart. For everyday use, install a release build (next step).
 
-### 7. A release build for everyday use (and for friends)
+### 8. A release build for everyday use (and for friends)
 
 A release build carries its own code, works anywhere, and survives restarts.
 
@@ -226,7 +250,7 @@ update public.app_config set latest_version_code = 4, latest_version_name = '1.0
 
 Then `npx supabase db push --remote`.
 
-### 8. Good to know
+### 9. Good to know
 
 - **Free Supabase projects pause after about a week with no activity.** Phones sharing
   location keep it awake; if it does pause, restore it from the Supabase dashboard.
