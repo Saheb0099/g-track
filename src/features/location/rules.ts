@@ -180,10 +180,52 @@ export function judgeFix(lastGoodFix: Fix | null, heldFix: Fix | null, next: Fix
   return { verdict: 'accept', reason: 'consistent', trip: !!lastGood.trip && dist >= SAVE_AFTER_METERS };
 }
 
-export function shouldSave(last: Fix | null, next: Fix, schedule: Schedule): boolean {
+// --- Rough fixes indoors ---------------------------------------------------------------------
+// Without GPS or Wi-Fi, a phone is placed by mobile towers: ±200 m, and the spot hops as it
+// switches towers. These rules stop that from moving someone's pin around while they sit still.
+
+/** Rougher than this, a fix may be a tower guess. */
+export const ROUGH_M = 100;
+/**
+ * A rough fix counts as moving only if the fix before it, at least this much earlier, was away
+ * too. Phones often send readings in pairs seconds apart, and a pair isn't two opinions.
+ */
+const MOVE_AGREE_MS = 45_000;
+/** A precise fix vouches for where the phone is for this long, while rough fixes agree with it. */
+const ANCHOR_MAX_MS = 6 * 60 * 60_000;
+
+/** A GPS-quality fix, worth holding on to. */
+export function isPrecise(fix: Fix): boolean {
+  return (fix.accuracy ?? MAX_ACCURACY_M) <= PRECISE_M;
+}
+
+/**
+ * A rough fix that fits a recent precise one (the anchor) says nothing new: the phone is still
+ * there, so the fix is moved onto the anchor. Returns null when the fix should be used as it is:
+ * no anchor, the anchor is too old, the fix is as good, or it's too far off to fit (moved away).
+ * "Fits" allows twice the rough fix's error: tower fixes are often off by more than they claim.
+ */
+export function snapToAnchor(anchor: Fix | null, next: Fix): Fix | null {
+  if (!anchor || clockMovedBack(anchor, next) || next.time - anchor.time > ANCHOR_MAX_MS) return null;
+  const acc = next.accuracy ?? MAX_ACCURACY_M;
+  const anchorAcc = anchor.accuracy ?? PRECISE_M;
+  if (acc <= anchorAcc) return null;
+  if (distanceMeters(anchor, next) > 2 * acc + anchorAcc) return null;
+  return { ...next, lat: anchor.lat, lng: anchor.lng, accuracy: anchorAcc };
+}
+
+/**
+ * Whether a believed fix becomes a saved point: when one is due, or after moving
+ * SAVE_AFTER_METERS. `previous` is the fix believed before this one; a rough fix only counts as
+ * moving once an earlier one agrees (MOVE_AGREE_MS), so hopping between towers isn't saved as trips.
+ */
+export function shouldSave(last: Fix | null, next: Fix, schedule: Schedule, previous: Fix | null = null): boolean {
   if (!last || clockMovedBack(last, next)) return true;
   if (next.time <= last.time) return false;
   if (next.time - last.time >= saveDueMs(schedule)) return true;
   // A fuzzy fix can look like movement; only count distance beyond the reading's own error.
-  return distanceMeters(last, next) >= SAVE_AFTER_METERS + (next.accuracy ?? 0);
+  const away = (fix: Fix) => distanceMeters(last, fix) >= SAVE_AFTER_METERS + (fix.accuracy ?? 0);
+  if (!away(next)) return false;
+  if ((next.accuracy ?? MAX_ACCURACY_M) <= ROUGH_M) return true;
+  return !!previous && previous.time > last.time && next.time - previous.time >= MOVE_AGREE_MS && away(previous);
 }

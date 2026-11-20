@@ -4,7 +4,14 @@
 //
 //   npm run test:rules
 
-import { distanceMeters, judgeFix, nextHeld, shouldSave } from '../src/features/location/rules.ts';
+import {
+  distanceMeters,
+  isPrecise,
+  judgeFix,
+  nextHeld,
+  shouldSave,
+  snapToAnchor,
+} from '../src/features/location/rules.ts';
 
 const HOME = { lat: 22.5726, lng: 88.3639 };
 const MIN = 60_000;
@@ -29,6 +36,32 @@ function track(fixes) {
     held = null;
   }
   return believed;
+}
+
+/** Runs fixes through the tracker's steps (believe, snap to the last GPS fix, save); returns saved points. */
+function saves(fixes, schedule = { checkEveryMs: MIN, saveEveryMs: 5 * MIN }) {
+  let lastGood = null;
+  let held = null;
+  let anchor = null;
+  let lastSaved = null;
+  const saved = [];
+  for (const raw of fixes) {
+    const { verdict, trip } = judgeFix(lastGood, held, raw);
+    if (verdict === 'hold') held = nextHeld(held, raw);
+    if (verdict !== 'accept') continue;
+    let fix = raw;
+    const snapped = snapToAnchor(anchor, raw);
+    if (snapped) fix = snapped;
+    else anchor = isPrecise(raw) ? raw : null;
+    const previous = lastGood;
+    lastGood = { ...fix, trip: !!trip };
+    held = null;
+    if (shouldSave(lastSaved, fix, schedule, previous)) {
+      saved.push(fix);
+      lastSaved = fix;
+    }
+  }
+  return saved;
 }
 
 /** Sitting at home with a precise fix, then `fixes`. */
@@ -144,6 +177,58 @@ for (const [name, kmh, acc] of [
     kept.length > 0 && far === 0,
     `${kept.length} kept, ${far} far`,
   );
+}
+
+// Tower fixes (±200 m, hopping as the phone switches towers) shouldn't move a pin that sits still.
+{
+  // GPS at home, then an hour indoors with tower fixes landing 300 m east or west.
+  const fixes = [];
+  for (let t = 1; t <= 60; t++) fixes.push({ ...east(HOME, t % 2 ? 0.3 : -0.3), time: t * MIN, accuracy: 200 });
+  const saved = saves(fromHome(fixes));
+  const off = saved.filter((f) => distanceMeters(HOME, f) > 50).length;
+  check(
+    'After GPS, tower fixes indoors keep the GPS spot',
+    off === 0 && saved.length >= 12,
+    `${saved.length} saved, ${off} off the GPS spot`,
+  );
+}
+{
+  // GPS at home, then leaving by car with only tower fixes: the pin follows once they no longer fit.
+  const saved = saves(fromHome(trip(30, 200, 20)));
+  const far = saved.filter((f) => distanceMeters(HOME, f) > 2000).length;
+  check('After GPS, leaving with tower fixes still moves the pin', far >= 3, `${far} saved points over 2 km away`);
+}
+{
+  // No GPS at all: settled on one tower, then hopping to another 600 m away every other minute.
+  const fixes = [0, 1, 2].map((t) => ({ ...HOME, time: t * MIN, accuracy: 200 }));
+  for (let t = 3; t <= 32; t++) fixes.push({ ...east(HOME, t % 2 ? 0.6 : 0), time: t * MIN, accuracy: 200 });
+  const saved = saves(fixes);
+  check(
+    'Hopping between towers is not saved as moving',
+    saved.length >= 5 && saved.length <= 8,
+    `${saved.length} saved in 30 min, a point is due every 5`,
+  );
+}
+{
+  // Readings in pairs seconds apart (as the phone sends them), hopping for a minute at a time.
+  const fixes = [0, 1, 2].map((t) => ({ ...HOME, time: t * MIN, accuracy: 200 }));
+  for (let t = 3; t <= 32; t++) {
+    const spot = east(HOME, t % 2 ? 0.6 : 0);
+    fixes.push({ ...spot, time: t * MIN, accuracy: 200 }, { ...spot, time: t * MIN + 5000, accuracy: 200 });
+  }
+  const saved = saves(fixes);
+  check('Paired readings on a hop are not saved as moving', saved.length <= 8, `${saved.length} saved in 30 min`);
+}
+{
+  // A bus with rough fixes is still a route: a point at least every 2 minutes.
+  const fixes = trip(40, 150, 30);
+  const saved = saves(fromHome(fixes)).length - 1;
+  check('Bus with ±150 m fixes still saves a route', saved >= 14, `${saved} points in 30 min`);
+}
+{
+  // Precise GPS on the move saves as before: every 250 m.
+  const saved = saves(fromHome(trip(30, 15, 20))).length - 1;
+  check('Driving with GPS saves as before', saved >= 19, `${saved} points in 20 min`);
 }
 
 // Known limit, reported rather than checked: a glitch that drifts steadily away looks like a trip.

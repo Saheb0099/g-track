@@ -10,12 +10,16 @@ import { showRequestNotice } from '@/features/location/push';
 import { clearAll, enqueue, getState, logEvent, setState, type PendingPoint } from '@/features/location/queue';
 import {
   clockMovedBack,
+  distanceMeters,
   DEFAULT_SCHEDULE,
+  isPrecise,
   judgeFix,
   nextHeld,
+  SAVE_AFTER_METERS,
   saveDueMs,
   scheduleFor,
   shouldSave,
+  snapToAnchor,
   type Fix,
   type Schedule,
   type Verdict,
@@ -193,17 +197,22 @@ export function recordReading(
 }
 
 async function recordReadingNow(
-  location: Location.LocationObject,
+  reading: Location.LocationObject,
   options: ReadingOptions,
 ): Promise<{ saved: boolean; verdict: Verdict }> {
-  const fix: Fix = {
+  let location = reading;
+  let fix: Fix = {
     lat: location.coords.latitude,
     lng: location.coords.longitude,
     time: location.timestamp,
     accuracy: location.coords.accuracy,
   };
 
-  const [lastGood, held] = await Promise.all([getState<Fix>('last_good'), getState<Fix>('held_jump')]);
+  const [lastGood, held, anchor] = await Promise.all([
+    getState<Fix>('last_good'),
+    getState<Fix>('held_jump'),
+    getState<Fix>('anchor'),
+  ]);
   const { verdict, reason, trip, keepHeld } = judgeFix(lastGood, held, fix);
   if (verdict !== 'accept') {
     if (verdict === 'hold') await setState('held_jump', nextHeld(held, fix));
@@ -211,6 +220,21 @@ async function recordReadingNow(
     return { saved: false, verdict };
   }
   if (trip) await logEvent(`accept fix: ${reason}`);
+
+  // A rough (tower) fix that fits the last GPS fix: the phone is still where GPS put it.
+  const snapped = snapToAnchor(anchor, fix);
+  if (snapped) {
+    fix = snapped;
+    location = {
+      ...location,
+      coords: { ...location.coords, latitude: fix.lat, longitude: fix.lng, accuracy: fix.accuracy ?? null },
+    };
+  } else if (isPrecise(fix)) {
+    await setState('anchor', fix);
+  } else if (anchor) {
+    await logEvent('rough fix no longer fits the last GPS fix; letting it go');
+    await setState('anchor', null);
+  }
   await setState('last_good', { ...fix, trip: !!trip });
   if (held) await setState('held_jump', null);
 
@@ -227,12 +251,20 @@ async function recordReadingNow(
   // A forced save (the app was just opened) still skips a reading within a minute of the last one.
   const keep = options.force
     ? !last || fix.time - last.time >= (options.minGapMs ?? 60_000) || clockMovedBack(last, fix)
-    : shouldSave(last, fix, await getSchedule());
+    : shouldSave(last, fix, await getSchedule(), lastGood);
   if (!keep) return { saved: false, verdict };
 
   const battery = options.battery !== undefined ? options.battery : await batteryPercent();
   await enqueue(toPoint(location, options.source ?? 'fused', battery));
   await setState('last_saved', fix);
+  // Points saved for moving, with distance and timing only (never where), to spot false moves.
+  const moved = last ? distanceMeters(last, fix) : 0;
+  if (last && moved >= SAVE_AFTER_METERS) {
+    await logEvent(
+      `saved a move: ±${Math.round(fix.accuracy ?? 0)}m, ${Math.round(moved)} m and ` +
+        `${Math.round((fix.time - last.time) / 1000)} s after the last`,
+    );
+  }
   return { saved: true, verdict };
 }
 
