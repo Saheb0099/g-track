@@ -1,7 +1,6 @@
 import BottomSheet, { BottomSheetScrollView } from '@gorhom/bottom-sheet';
 import { router, useFocusEffect, useIsFocused, useLocalSearchParams } from 'expo-router';
 import { NavigationBar } from 'expo-navigation-bar';
-import { StatusBar } from 'expo-status-bar';
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, BackHandler, Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
 // The gesture handler's ScrollView, so the days scroll sideways inside the sheet (React Native's
@@ -46,7 +45,10 @@ export default function MemberHistory() {
   const member = members.data?.find((m) => m.userId === userId);
 
   const days = useRecentDays();
-  const [dayIndex, setDayIndex] = useState(0);
+  // The chosen day by its date, so it stays put when the list moves on a day at midnight; null
+  // follows today. A day that drops off the week falls back to today.
+  const [dayKey, setDayKey] = useState<string | null>(null);
+  const dayIndex = Math.max(0, days.findIndex((d) => d.start.toISOString() === dayKey));
   const history = useDayHistory(userId, days[dayIndex]);
 
   const points = useMemo(() => history.data ?? [], [history.data]);
@@ -57,7 +59,8 @@ export default function MemberHistory() {
 
   const isYou = userId === session?.user.id;
   const name = member?.displayName ?? '';
-  const title = isYou ? 'Your week' : `${name.split(' ')[0] || 'Their'}'s week`;
+  // "Their week" until the name has loaded.
+  const title = isYou ? 'Your week' : name ? `${name.split(' ')[0]}'s week` : 'Their week';
   const top = safe.top + 12;
   // How tall the days and totals are, for the lowered sheet's height.
   const [peekHeight, setPeekHeight] = useState(0);
@@ -75,7 +78,7 @@ export default function MemberHistory() {
   );
 
   function pickDay(index: number) {
-    setDayIndex(index);
+    setDayKey(index === 0 ? null : days[index].start.toISOString());
     setSelected(null);
   }
 
@@ -86,10 +89,10 @@ export default function MemberHistory() {
 
   return (
     <View style={styles.container}>
-      <StatusBar style={darkMap ? 'light' : 'dark'} />
       {/* The navigation buttons sit over the map here, so they follow its brightness (a light map
           stays light in dark mode). Only while this screen is showing: screens opened over it
-          follow the app's theme (root layout). */}
+          follow the app's theme (root layout). The status bar does the same, set in the app
+          layout. */}
       {focused && <NavigationBar style={darkMap ? 'light' : 'dark'} />}
       <HistoryMap
         ref={map}

@@ -1,7 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
-import { StatusBar } from 'expo-status-bar';
 import { useState } from 'react';
-import { ActivityIndicator, Linking, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Text } from '@/components/text';
@@ -11,7 +10,7 @@ import { useRememberInvite } from '@/features/groups/pending-invite';
 import { useAppColorScheme } from '@/lib/appearance';
 import { signInWithGoogle } from '@/lib/auth';
 import { friendlyError } from '@/lib/errors';
-import { PRIVACY_URL } from '@/lib/links';
+import { openLink, PRIVACY_URL } from '@/lib/links';
 import { type as typeStyles, useColors } from '@/lib/theme';
 
 /** Where the friends sit on the illustration: offset in the 300 pt shape, size, and a name for the colour. */
@@ -51,7 +50,6 @@ export default function SignIn() {
     <ScrollView
       style={{ backgroundColor: colors.background }}
       contentContainerStyle={[styles.container, { paddingTop: safe.top + 32, paddingBottom: safe.bottom + 24 }]}>
-      <StatusBar style={dark ? 'light' : 'dark'} />
 
       {/* Friends gathered on a soft shape: decoration only. */}
       <View style={styles.art} accessible={false} importantForAccessibility="no-hide-descendants">
@@ -123,7 +121,7 @@ export default function SignIn() {
         {error && <Text style={[typeStyles.caption, styles.center, { color: colors.danger }]}>{error}</Text>}
         <Text
           style={[typeStyles.caption, styles.center, styles.link, { color: colors.accentText, fontSize: 12 }]}
-          onPress={() => Linking.openURL(PRIVACY_URL)}
+          onPress={() => openLink(PRIVACY_URL)}
           accessibilityRole="link">
           Privacy policy
         </Text>

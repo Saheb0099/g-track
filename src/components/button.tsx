@@ -17,6 +17,8 @@ type Props = {
   variant?: Variant;
   loading?: boolean;
   disabled?: boolean;
+  /** Can't be pressed but keeps its colours: a confirmation ("Got a fresh location"), not a dead button. */
+  readOnly?: boolean;
   /** A Material Symbol before the title, coloured to match; or any element. */
   icon?: IconName | ReactNode;
   size?: 'large' | 'small';
@@ -40,10 +42,21 @@ function palette(colors: Colors, variant: Variant) {
   }
 }
 
-export function Button({ title, onPress, variant = 'primary', loading, disabled, icon, size = 'large', style }: Props) {
+export function Button({
+  title,
+  onPress,
+  variant = 'primary',
+  loading,
+  disabled,
+  readOnly,
+  icon,
+  size = 'large',
+  style,
+}: Props) {
   const colors = useColors();
   const { bg, fg, border } = palette(colors, variant);
-  const inactive = disabled || loading;
+  // Faded only when it's unavailable; a read-only button just can't be pressed.
+  const inactive = (disabled || loading) && !readOnly;
   const height = size === 'large' ? 48 : 40;
   // Material's disabled look: the content and container fade, whatever the variant.
   const content = inactive && !loading ? colors.text : fg;
@@ -51,9 +64,9 @@ export function Button({ title, onPress, variant = 'primary', loading, disabled,
   return (
     <Pressable
       onPress={onPress}
-      disabled={inactive}
+      disabled={inactive || readOnly}
       accessibilityRole="button"
-      accessibilityState={{ disabled: inactive, busy: loading }}
+      accessibilityState={{ disabled: inactive || readOnly, busy: loading }}
       android_ripple={{ color: `${fg}33`, borderless: false, foreground: true }}
       style={({ pressed }) => [
         styles.base,

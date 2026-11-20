@@ -58,7 +58,9 @@ function RootStack() {
       {/* Android's navigation buttons follow G Track's theme (including a chosen Light or Dark),
           not the phone's: light buttons in dark mode, dark ones in light mode. */}
       <NavigationBar style={colorScheme === 'dark' ? 'light' : 'dark'} />
-      <Stack screenOptions={{ headerShown: false }}>
+      {/* Status bar icons follow the theme here (sign-in); the app's own screens set theirs in
+          the (app) layout. */}
+      <Stack screenOptions={{ headerShown: false, statusBarStyle: colorScheme === 'dark' ? 'light' : 'dark' }}>
         <Stack.Protected guard={!session}>
           <Stack.Screen name="sign-in" />
         </Stack.Protected>

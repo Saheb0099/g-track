@@ -11,6 +11,7 @@ import { Button } from '@/components/button';
 import { Icon } from '@/components/icon';
 import { openAppSettings, openStepPage, phoneSteps, type PhoneStep } from '@/features/location/phone-steps';
 import { useSetupChecks, useTracking } from '@/features/location/use-tracking';
+import { openLink } from '@/lib/links';
 import { radius, type as typeStyles, useColors } from '@/lib/theme';
 
 const PACKAGE = Constants.expoConfig?.android?.package ?? 'com.sahebbeshra.gtrack';
@@ -237,7 +238,7 @@ export default function LocationSetup() {
       })}
       <Text
         style={[typeStyles.bodyStrong, styles.guide, { color: colors.accentText }]}
-        onPress={() => Linking.openURL(phone.guideUrl)}>
+        onPress={() => openLink(phone.guideUrl)}>
         More help for {phone.brand} phones
       </Text>
 

@@ -8,7 +8,7 @@ import { type as typeStyles, useColors } from '@/lib/theme';
 /**
  * The map's credit. OpenStreetMap's licence asks for it on the map itself, so a small
  * "© OpenStreetMap" stays in the corner; tapping it opens About, which credits every map
- * provider. A provider that asks for its own credit on the map (CARTO) is added after it.
+ * provider. The map on show adds its own provider's credit after it (OpenTopoMap, CARTO...).
  * Used in place of MapLibre's (i) button.
  */
 export function MapCredit({ top }: { top: number }) {

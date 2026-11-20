@@ -9,17 +9,22 @@ import { useSyncExternalStore } from 'react';
  */
 export function storedSetting<T extends string>(key: string, choices: readonly T[], fallback: T) {
   const listeners = new Set<() => void>();
+  // Read from storage once, then kept here: screens read it on every render.
+  let current: T | undefined;
 
   function get(): T {
+    if (current !== undefined) return current;
     try {
       const value = localStorage.getItem(key) as T | null;
-      return value && choices.includes(value) ? value : fallback;
+      current = value && choices.includes(value) ? value : fallback;
     } catch {
-      return fallback;
+      current = fallback;
     }
+    return current;
   }
 
   function set(value: T) {
+    current = value;
     try {
       localStorage.setItem(key, value);
     } catch {

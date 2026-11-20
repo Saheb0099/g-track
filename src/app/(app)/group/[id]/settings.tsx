@@ -151,7 +151,9 @@ export default function GroupSettings() {
   }
 
   function confirmLeave() {
-    const next = others[0];
+    // Whom the server makes admin: the longest-standing member, skipping accounts being deleted
+    // unless there's nobody else (members are listed by join date).
+    const next = others.find((m) => !m.deletedAt) ?? others[0];
     const detail = !isAdmin
       ? 'People in this group will no longer see you, and you will no longer see them.'
       : next

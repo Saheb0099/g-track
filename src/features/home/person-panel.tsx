@@ -1,6 +1,6 @@
 import { router } from 'expo-router';
 import { useMemo } from 'react';
-import { ActivityIndicator, Linking, Pressable, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
 
 import { Text } from '@/components/text';
 import { Avatar } from '@/components/avatar';
@@ -15,6 +15,7 @@ import { ASK_AGAIN_MS, countdown, useAskForLocation } from '@/features/home/ask-
 import { buildTimeline, formatDistance, travelledM } from '@/features/history/timeline';
 import { distanceMeters } from '@/features/location/rules';
 import type { LivePosition } from '@/features/map/api';
+import { openLink } from '@/lib/links';
 import { type as typeStyles, useColors } from '@/lib/theme';
 import { timeAgoShort } from '@/lib/time';
 
@@ -55,8 +56,17 @@ export function PersonPanel({
 }: Props) {
   const colors = useColors();
   const ask = useAskForLocation(member, position, onFreshLocation);
-  // Only people whose live position you may see can be asked (the server checks this too).
-  const canAsk = !isYou && member.sharingEnabled && !member.deletedAt;
+  // Only people whose live position you may see in this group can be asked. The server checks
+  // sharing too, but lets an ask through for someone hidden here who's visible through another
+  // group; their answer wouldn't show here. Not when their location is off or not allowed
+  // either: their phone would wake but couldn't answer, and the status line already says why.
+  const canAsk =
+    !isYou &&
+    member.sharingEnabled &&
+    !member.deletedAt &&
+    !member.hiddenAt &&
+    member.status !== 'location_off' &&
+    member.status !== 'permission_missing';
   const asking = ask.phase === 'asking';
   const answered = ask.phase === 'done';
   // After asking, the button counts down to when they can be asked again (the server's 2 minutes).
@@ -83,7 +93,7 @@ export function PersonPanel({
 
   // Google Maps (or whatever handles map links) with directions to where they are now.
   const openDirections = () =>
-    position && Linking.openURL(`https://www.google.com/maps/dir/?api=1&destination=${position.lat},${position.lng}`);
+    position && openLink(`https://www.google.com/maps/dir/?api=1&destination=${position.lat},${position.lng}`);
   const battery = position?.batteryPct;
 
   const travelled = history.data ? formatDistance(travelledM(timeline)) : null;
@@ -182,7 +192,8 @@ export function PersonPanel({
                 }
                 variant={answered ? 'strong' : 'outlined'}
                 size="small"
-                disabled={asking || answered || waiting}
+                disabled={asking || waiting}
+                readOnly={answered}
                 onPress={ask.ask}
                 icon={
                   asking ? (

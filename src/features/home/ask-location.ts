@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 
 import type { Member } from '@/features/groups/api';
 import type { LivePosition } from '@/features/map/api';
+import { useAuth } from '@/lib/auth';
 import { friendlyError } from '@/lib/errors';
 import { supabase } from '@/lib/supabase';
 
@@ -15,21 +16,23 @@ const DONE_SHOWN_MS = 5_000;
 /** The server's wait between asks to the same person (request_location), counted down here. */
 export const ASK_AGAIN_MS = 2 * 60_000;
 
-// When this phone last asked each person, so the countdown survives closing the card or the app.
-const askedKey = (userId: string) => `gtrack.asked.${userId}`;
+// When you last asked each person on this phone, so the countdown survives closing the card or
+// the app. Per signed-in account too, as the server's wait is: another account signed in here
+// starts with no wait.
+const askedKey = (meId: string, userId: string) => `gtrack.asked.${meId}.${userId}`;
 
-function readAskedAt(userId: string): number {
+function readAskedAt(key: string): number {
   try {
-    return Number(localStorage.getItem(askedKey(userId))) || 0;
+    return Number(localStorage.getItem(key)) || 0;
   } catch {
     return 0;
   }
 }
 
-function writeAskedAt(userId: string, at: number | null) {
+function writeAskedAt(key: string, at: number | null) {
   try {
-    if (at === null) localStorage.removeItem(askedKey(userId));
-    else localStorage.setItem(askedKey(userId), String(at));
+    if (at === null) localStorage.removeItem(key);
+    else localStorage.setItem(key, String(at));
   } catch {
     // Not remembered; the server still enforces the wait.
   }
@@ -41,7 +44,12 @@ export function countdown(ms: number): string {
   return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
 }
 
-type State = { phase: 'idle' } | { phase: 'asking'; before: string | null } | { phase: 'failed'; message: string };
+// `before` is their position's time when asking. A failed ask that timed out keeps it, so an
+// answer that arrives late still counts.
+type State =
+  | { phase: 'idle' }
+  | { phase: 'asking'; before: string | null }
+  | { phase: 'failed'; message: string; before?: string | null };
 
 export type AskPhase = 'idle' | 'asking' | 'done' | 'failed';
 
@@ -51,7 +59,8 @@ export type AskPhase = 'idle' | 'asking' | 'done' | 'failed';
  */
 export function useAskForLocation(member: Member, position: LivePosition | undefined, onAnswered: () => void) {
   const [state, setState] = useState<State>({ phase: 'idle' });
-  const [askedAt, setAskedAt] = useState(() => readAskedAt(member.userId));
+  const key = askedKey(useAuth().session?.user.id ?? 'none', member.userId);
+  const [askedAt, setAskedAt] = useState(() => readAskedAt(key));
   const [now, setNow] = useState(() => Date.now());
   /** Time left before this person can be asked again. */
   const waitMs = Math.max(0, askedAt + ASK_AGAIN_MS - now);
@@ -59,8 +68,11 @@ export function useAskForLocation(member: Member, position: LivePosition | undef
   const recordedAt = position?.recordedAt ?? null;
   const name = member.displayName.split(' ')[0];
   // A newer position than the one from before asking. Compared with that, not with this
-  // phone's clock, which may not match theirs.
-  const answered = state.phase === 'asking' && recordedAt !== null && recordedAt !== state.before;
+  // phone's clock, which may not match theirs. After "Couldn't reach" a late answer still
+  // counts, but only until they can be asked again: later, it's just their usual update.
+  const before = state.phase === 'idle' ? undefined : state.before;
+  const answered =
+    before !== undefined && (state.phase === 'asking' || waiting) && recordedAt !== null && recordedAt !== before;
   const phase: AskPhase = answered ? 'done' : state.phase;
 
   // Answered: show them on the map, and after a moment offer the button again.
@@ -84,7 +96,12 @@ export function useAskForLocation(member: Member, position: LivePosition | undef
   useEffect(() => {
     if (state.phase !== 'asking' || answered) return;
     const timer = setTimeout(
-      () => setState({ phase: 'failed', message: `Couldn't reach ${name}'s phone. It may be off or offline.` }),
+      () =>
+        setState((s) =>
+          s.phase === 'asking'
+            ? { phase: 'failed', message: `Couldn't reach ${name}'s phone. It may be off or offline.`, before: s.before }
+            : s,
+        ),
       ANSWER_WAIT_MS,
     );
     return () => clearTimeout(timer);
@@ -93,7 +110,7 @@ export function useAskForLocation(member: Member, position: LivePosition | undef
   function startWait(at: number | null) {
     setAskedAt(at ?? 0);
     setNow(Date.now());
-    writeAskedAt(member.userId, at);
+    writeAskedAt(key, at);
   }
 
   async function ask() {
@@ -114,7 +131,7 @@ export function useAskForLocation(member: Member, position: LivePosition | undef
     // Otherwise the wake-up is on its way; the answer shows up as a new position.
   }
 
-  return { phase, message: state.phase === 'failed' ? state.message : null, waitMs, ask };
+  return { phase, message: phase === 'failed' && state.phase === 'failed' ? state.message : null, waitMs, ask };
 }
 
 /** The function's own error key ("asked_recently") from its reply, if it sent one. */

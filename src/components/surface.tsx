@@ -78,17 +78,17 @@ export function MapButton({
 
 /**
  * The compass: an arrow that always points to real north. `bearing` is the map's rotation, so
- * the arrow turns the other way. Grey while the map faces north, red once it's turned, as a
- * hint that tapping turns it back.
+ * the arrow turns the other way. Grey while the map faces north and lies flat, red once it's
+ * turned or tilted, as a hint that tapping puts it back.
  */
-export function CompassNeedle({ bearing }: { bearing: number }) {
+export function CompassNeedle({ bearing, northUp }: { bearing: number; northUp: boolean }) {
   const colors = useColors();
   return (
     <Icon
       name="navigation"
       size={24}
       filled
-      color={bearing === 0 ? colors.muted : colors.danger}
+      color={northUp ? colors.muted : colors.danger}
       style={{ transform: [{ rotate: `${-bearing}deg` }] }}
     />
   );

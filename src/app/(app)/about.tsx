@@ -1,12 +1,12 @@
 import { Fragment } from 'react';
-import { Linking, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Card, RowDivider, SectionLabel } from '@/components/card';
 import { Icon } from '@/components/icon';
 import { Text } from '@/components/text';
 import { APP_VERSION } from '@/lib/app-version';
-import { OSM_COPYRIGHT_URL, PRIVACY_URL, SOURCE_URL } from '@/lib/links';
+import { openLink, OSM_COPYRIGHT_URL, PRIVACY_URL, SOURCE_URL } from '@/lib/links';
 import { type as typeStyles, useColors } from '@/lib/theme';
 
 type Credit = { title: string; detail: string; url?: string };
@@ -15,8 +15,14 @@ type Credit = { title: string; detail: string; url?: string };
 const MAPS: Credit[] = [
   { title: 'Map data', detail: '© OpenStreetMap contributors, ODbL', url: OSM_COPYRIGHT_URL },
   { title: 'OpenFreeMap', detail: 'Standard, Bright and Simple maps', url: 'https://openfreemap.org' },
+  { title: 'OpenMapTiles', detail: 'Map design behind the OpenFreeMap maps', url: 'https://openmaptiles.org' },
   { title: 'CARTO', detail: 'Voyager map', url: 'https://carto.com/attributions' },
   { title: 'VersaTiles', detail: 'Colorful map', url: 'https://versatiles.org' },
+  {
+    title: 'ESA WorldCover',
+    detail: 'Land cover in the Colorful map, CC BY 4.0',
+    url: 'https://esa-worldcover.org',
+  },
   { title: 'OpenStreetMap', detail: 'OpenStreetMap map', url: 'https://www.openstreetmap.org' },
   { title: 'OpenStreetMap France', detail: 'CyclOSM and Humanitarian maps', url: 'https://www.openstreetmap.fr' },
   { title: 'OpenTopoMap', detail: 'Topo map, CC-BY-SA', url: 'https://opentopomap.org' },
@@ -73,7 +79,7 @@ function Section({ label, credits }: { label: string; credits: Credit[] }) {
           <Fragment key={credit.title}>
             {i > 0 && <RowDivider inset={16} />}
             <Pressable
-              onPress={() => credit.url && Linking.openURL(credit.url)}
+              onPress={() => credit.url && openLink(credit.url)}
               disabled={!credit.url}
               accessibilityRole={credit.url ? 'link' : undefined}
               android_ripple={credit.url ? { color: `${colors.text}14` } : undefined}

@@ -22,7 +22,8 @@ export default function JoinGroup() {
     return (
       <View style={[styles.container, { backgroundColor: colors.background }]}>
         <Text style={[styles.title, { color: colors.text }]}>{title}</Text>
-        <Text style={[styles.body, { color: colors.muted }]}>{body}</Text>
+        {/* No empty line when there's nothing to add ("You're already in…"). */}
+        {body ? <Text style={[styles.body, { color: colors.muted }]}>{body}</Text> : null}
         {action}
       </View>
     );

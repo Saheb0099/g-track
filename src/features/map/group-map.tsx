@@ -69,12 +69,12 @@ type Props = {
   staleMs: number;
   /** The group shown: switching to another frames its people. */
   frameKey: string;
-  /** The map's rotation in whole degrees, as it turns (for the compass button). */
-  onBearingChange?: (degrees: number) => void;
+  /** The map's rotation in whole degrees and whether it's tilted, as they change (for the compass). */
+  onTurn?: (turn: { bearing: number; tilted: boolean }) => void;
 };
 
 export const GroupMap = forwardRef<GroupMapHandle, Props>(function GroupMap(
-  { positions, members, now, meId, selectedId, onSelect, insets, staleMs, frameKey, onBearingChange },
+  { positions, members, now, meId, selectedId, onSelect, insets, staleMs, frameKey, onTurn },
   ref,
 ) {
   const colors = useColors();
@@ -87,7 +87,7 @@ export const GroupMap = forwardRef<GroupMapHandle, Props>(function GroupMap(
   const pinTappedAt = useRef(0);
   // Where the camera is now: turning to north keeps this centre and zoom.
   const view = useRef<ViewState | null>(null);
-  const bearing = useRef(0);
+  const turn = useRef({ bearing: 0, tilted: false });
   // The camera ignores moves made before the map has loaded its style.
   const [loaded, setLoaded] = useState(false);
 
@@ -138,10 +138,11 @@ export const GroupMap = forwardRef<GroupMapHandle, Props>(function GroupMap(
   function trackView(next: ViewState) {
     view.current = next;
     // Whole degrees only, so the compass updates without re-rendering on every frame of a pan.
-    const degrees = Math.round(next.bearing) % 360;
-    if (degrees !== bearing.current) {
-      bearing.current = degrees;
-      onBearingChange?.(degrees);
+    const bearing = Math.round(next.bearing) % 360;
+    const tilted = Math.round(next.pitch) > 0;
+    if (bearing !== turn.current.bearing || tilted !== turn.current.tilted) {
+      turn.current = { bearing, tilted };
+      onTurn?.(turn.current);
     }
   }
 

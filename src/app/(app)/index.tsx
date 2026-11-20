@@ -1,7 +1,6 @@
 import BottomSheet, { BottomSheetScrollView } from '@gorhom/bottom-sheet';
 import { router, useFocusEffect, useIsFocused } from 'expo-router';
 import { NavigationBar } from 'expo-navigation-bar';
-import { StatusBar } from 'expo-status-bar';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, BackHandler, Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue } from 'react-native-reanimated';
@@ -74,8 +73,9 @@ export default function Home() {
   const [now, setNow] = useState(() => Date.now());
   // How tall the selected person's details are, for the lowered sheet's height.
   const [peek, setPeek] = useState<{ userId?: string; height: number }>({ height: 0 });
-  // The map's rotation, so the compass needle keeps pointing north.
-  const [bearing, setBearing] = useState(0);
+  // The map's rotation and tilt, so the compass needle keeps pointing north.
+  const [turn, setTurn] = useState({ bearing: 0, tilted: false });
+  const northUp = turn.bearing === 0 && !turn.tilted;
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), CLOCK_TICK_MS);
     return () => clearInterval(timer);
@@ -114,6 +114,10 @@ export default function Home() {
   const mine = positions.find((p) => p.userId === meId);
   const myPosition =
     profile.data?.sharing_enabled && mine && now - Date.parse(mine.recordedAt) <= staleMs ? mine : undefined;
+  // Your own pin always shows, but you count as sharing only while you share with this group.
+  const meSharingHere =
+    !!profile.data?.sharing_enabled && !members.data?.find((m) => m.userId === meId)?.hiddenAt;
+  const sharingCount = positions.filter((p) => p.userId !== meId || meSharingHere).length;
   const topBar = safe.top + 12;
   // Sheet heights, measured in the area above Android's navigation bar. The person view needs
   // more room than the people list; fully open stops just under the top bar.
@@ -122,12 +126,14 @@ export default function Home() {
   const personPeek = peek.userId === selected?.userId && peek.height ? SHEET_TOP + peek.height + PEEK_GAP : PERSON_PEEK;
   const snapPoints = [selected ? personPeek : PEOPLE_PEEK, Math.round(sheetArea * 0.52), sheetArea - (topBar + 64)];
   const mapInsets = { top: topBar + 56, bottom: height * 0.45 };
-  // Hidden once the sheet is pulled up close to the top bar.
+  // Hidden once the sheet is pulled up close to the top bar. Moved off screen, not just made
+  // clear, so it can't catch taps meant for the top bar or the map buttons under it.
   const fabStyle = useAnimatedStyle(() => {
     const top = sheetTop.get();
+    const hidden = top < topBar + 200;
     return {
-      opacity: top < topBar + 200 ? 0 : 1,
-      transform: [{ translateY: top - FAB_ABOVE_SHEET }],
+      opacity: hidden ? 0 : 1,
+      transform: [{ translateY: hidden ? -1000 : top - FAB_ABOVE_SHEET }],
     };
   });
 
@@ -154,10 +160,10 @@ export default function Home() {
 
   return (
     <View style={styles.container}>
-      <StatusBar style={darkMap ? 'light' : 'dark'} />
       {/* The navigation buttons sit over the map here, so they follow its brightness (a light map
           stays light in dark mode). Only while this screen is showing: screens opened over it
-          follow the app's theme (root layout). */}
+          follow the app's theme (root layout). The status bar does the same, set in the app
+          layout. */}
       {focused && <NavigationBar style={darkMap ? 'light' : 'dark'} />}
       <GroupMap
         ref={map}
@@ -170,7 +176,7 @@ export default function Home() {
         insets={mapInsets}
         staleMs={staleMs}
         frameKey={groupId ?? 'solo'}
-        onBearingChange={setBearing}
+        onTurn={setTurn}
       />
 
       {/* Group switcher and profile, shaped like a search bar */}
@@ -191,7 +197,7 @@ export default function Home() {
             </Text>
             <Text style={[typeStyles.caption, { color: colors.muted, fontSize: 12, lineHeight: 16 }]} numberOfLines={1}>
               {group
-                ? `${positions.length} of ${group.memberCount} sharing`
+                ? `${sharingCount} of ${group.memberCount} sharing`
                 : groups.isPending
                   ? 'Loading…'
                   : 'No group yet'}
@@ -213,12 +219,12 @@ export default function Home() {
       <View style={[styles.controls, { top: topBar + 72 }]}>
         <MapButton icon="layers" accessibilityLabel="Map style" onPress={() => router.push('/map-style')} />
         <MapButton icon="groups" accessibilityLabel="Show everyone" onPress={() => map.current?.showEveryone()} />
-        {/* The needle points north as the map turns; tapping turns the map back to north-up. */}
+        {/* The needle points north as the map turns; tapping turns the map back to north-up and flat. */}
         <MapButton
           icon="navigation"
-          accessibilityLabel={bearing === 0 ? 'Map faces north' : 'Turn map to face north'}
+          accessibilityLabel={northUp ? 'Map faces north' : 'Turn map to face north'}
           onPress={() => map.current?.faceNorth()}>
-          <CompassNeedle bearing={bearing} />
+          <CompassNeedle bearing={turn.bearing} northUp={northUp} />
         </MapButton>
       </View>
       <Animated.View style={[styles.fab, fabStyle]} pointerEvents="box-none">
