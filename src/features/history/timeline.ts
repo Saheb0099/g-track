@@ -75,6 +75,18 @@ function stayRadius(p: HistoryPoint): number {
  * accuracy: readings wobbling back and forth add nothing, while slow steady movement (many small
  * steps close together) still adds up.
  */
+/**
+ * Travel with no stay before it: there's no place to measure from, and rough readings at the start
+ * of a day wobble before they settle. It counts only if they ended up well away from where the day
+ * began: past this, and past twice the roughest reading.
+ */
+const MIN_LEADING_TRIP_M = 500;
+function endedFarAway(points: HistoryPoint[]): boolean {
+  if (points.length < 2) return false;
+  const roughest = Math.max(...points.map((p) => p.accuracyM ?? 0));
+  return distanceM(points[0], points[points.length - 1]) > Math.max(MIN_LEADING_TRIP_M, 2 * roughest);
+}
+
 function pathLength(points: HistoryPoint[]): number {
   let total = 0;
   let from = points[0];
@@ -115,6 +127,8 @@ export function buildTimeline(input: HistoryPoint[]): TimelineItem[] {
       const tripPoints = [...travelled, cluster[0]];
       if (last && tripPoints.length > 1) {
         items.push({ kind: 'trip', from: last.to, to: from, distanceM: pathLength(tripPoints) });
+      } else if (!last && endedFarAway(tripPoints)) {
+        items.push({ kind: 'trip', from: tripPoints[0].time, to: from, distanceM: pathLength(tripPoints) });
       }
       items.push({ kind: 'stay', from, to, lat: centre.lat, lng: centre.lng, points: cluster.length });
       travelled = [cluster[cluster.length - 1]];
@@ -178,6 +192,8 @@ export function buildTimeline(input: HistoryPoint[]): TimelineItem[] {
   const last = items.at(-1);
   if (last && travelled.length > 1 && travelled.at(-1)!.time > last.to) {
     items.push({ kind: 'trip', from: last.to, to: travelled.at(-1)!.time, distanceM: pathLength(travelled) });
+  } else if (!last && endedFarAway(travelled)) {
+    items.push({ kind: 'trip', from: travelled[0].time, to: travelled.at(-1)!.time, distanceM: pathLength(travelled) });
   }
   return mergeSamePlace(items);
 }

@@ -98,6 +98,9 @@ a phone that never moved showed "Moved 11 km" over two hours at night.
   reading every minute, a slow walk dragged the centre along and became one long stay.
 - Anything else that reads "where they are now" from the timeline (like "Here since") must check
   their live position too: the timeline waits for a second reading before deciding they left.
+- Travel before the day's first stay (or on a day with no stay) counts too, but only if they
+  ended up well away from where the day began (over 500 m, and over twice the roughest reading):
+  counting it plainly turned rough readings at midnight into a trip.
 - Known cost: places under ~300 m apart, seen only with rough readings, often show as one place.
 
 Tests: `npm run test:timeline` (a phone lying still, trips by bus and on foot, two nearby places).

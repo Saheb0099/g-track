@@ -155,6 +155,34 @@ const describe = (r) =>
   );
 }
 
+// The start of a day: travel before the first stay, or with no stay at all, counts too.
+{
+  // On a bus at midnight, arriving 20 km away, then staying. The day's readings begin 2.5 km in.
+  const r = runs(() => [...go(-20000, 0, 0, 0, 0, 40, 5, gps), ...stay(0, 0, 40 * MIN, 120, 5, gps)]);
+  check('Day starting on a bus ride: the ride counts', r.km > 16.5 && r.km < 19, describe(r));
+}
+{
+  const r = runs(() => [...go(-20000, 0, 0, 0, 0, 40, 5, () => 300), ...stay(0, 0, 40 * MIN, 120, 5, rough)]);
+  check('Same, with tower readings: the ride counts', r.km > 15 && r.km < 21, describe(r));
+}
+{
+  // On a train for two hours, never stopping for 10 minutes. Readings run from 4 km to 96 km in;
+  // the last one waits for the next to confirm it, as always.
+  const r = runs(() => go(0, 0, 100000, 0, 0, 125, 5, gps));
+  check('On the move all day (train): the distance counts', r.km > 85 && r.km < 93, describe(r));
+}
+{
+  // Rough readings wobbling at home from midnight must not become a trip before the first stay.
+  const r = runs(() => stay(0, 0, 0, 130, 5, rough));
+  const trips = [];
+  for (let run = 0; run < RUNS; run++) {
+    seed = 1000 + run * 7919;
+    const first = buildTimeline(stay(0, 0, 0, 130, 5, rough))[0];
+    if (first?.kind === 'trip') trips.push(first);
+  }
+  check('Rough readings at home from midnight: no trip before the first stay', trips.length === 0, `${trips.length} of ${RUNS} days; ${describe(r)}`);
+}
+
 // Known limits, reported rather than checked.
 {
   const r = runs(() => [
