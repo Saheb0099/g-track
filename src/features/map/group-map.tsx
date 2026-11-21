@@ -265,7 +265,7 @@ export const GroupMap = forwardRef<GroupMapHandle, Props>(function GroupMap(
         })}
       </Map>
       {/* The OpenStreetMap credit must stay visible: just under the top bar, clear of the sheet. */}
-      <MapCredit top={insets.top + 8} />
+      <MapCredit top={insets.top + 8} mapReady={loaded} />
     </>
   );
 });

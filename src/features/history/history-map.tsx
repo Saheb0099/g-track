@@ -122,7 +122,7 @@ export const HistoryMap = forwardRef<HistoryMapHandle, Props>(function HistoryMa
         )}
       </Map>
       {/* The OpenStreetMap credit must stay visible: below the floating controls, clear of the sheet. */}
-      <MapCredit top={insets.top + 8} />
+      <MapCredit top={insets.top + 8} mapReady={loaded} />
     </>
   );
 });
