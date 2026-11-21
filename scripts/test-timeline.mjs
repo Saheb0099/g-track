@@ -133,6 +133,16 @@ const describe = (r) =>
   check('Two places 400 m apart, rough readings: mostly told apart', r.share(2) >= 0.7, describe(r));
 }
 {
+  // A slow walk with a reading every minute (group timing set to 1 min): readings close together
+  // must not drag the place along and turn the walk into one long stay.
+  const r = runs(() => [
+    ...stay(0, 0, 0, 30, 1, gps),
+    ...go(0, 0, 1000, 0, 30 * MIN, 30, 1, gps),
+    ...stay(1000, 0, 60 * MIN, 30, 1, gps),
+  ]);
+  check('Slow 1 km walk, a reading every minute: the walk is kept', r.km > 0.7 && r.share(2) === 1, describe(r));
+}
+{
   // Leaving is noticed at the first reading away, not one reading late.
   const day = [...stay(0, 0, 0, 60, 5, gps), ...go(0, 0, 3000, 0, 60 * MIN, 45, 5, gps)];
   const items = buildTimeline(day);

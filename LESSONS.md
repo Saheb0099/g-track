@@ -94,6 +94,10 @@ a phone that never moved showed "Moved 11 km" over two hours at night.
   `nextHeld` in the location rules).
 - When adding up distance, skip steps shorter than the readings' accuracy; wobbles back and forth
   add up to kilometres.
+- Readings must also stay near where a place began, not only near its moving centre: with a
+  reading every minute, a slow walk dragged the centre along and became one long stay.
+- Anything else that reads "where they are now" from the timeline (like "Here since") must check
+  their live position too: the timeline waits for a second reading before deciding they left.
 - Known cost: places under ~300 m apart, seen only with rough readings, often show as one place.
 
 Tests: `npm run test:timeline` (a phone lying still, trips by bus and on foot, two nearby places).

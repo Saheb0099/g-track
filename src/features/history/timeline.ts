@@ -71,25 +71,37 @@ function stayRadius(p: HistoryPoint): number {
 }
 
 /**
- * Length of a path. A step shorter than its readings' accuracy isn't counted: it can't be told
- * apart from the readings wobbling, and wobbles going back and forth add up.
+ * Length of a path, measured from point to point only once they're further apart than their
+ * accuracy: readings wobbling back and forth add nothing, while slow steady movement (many small
+ * steps close together) still adds up.
  */
 function pathLength(points: HistoryPoint[]): number {
   let total = 0;
+  let from = points[0];
   for (let i = 1; i < points.length; i++) {
-    const a = points[i - 1];
-    const b = points[i];
-    const step = distanceM(a, b);
-    if (step > Math.max(a.accuracyM ?? 0, b.accuracyM ?? 0)) total += step;
+    const p = points[i];
+    const step = distanceM(from, p);
+    if (step > Math.max(from.accuracyM ?? 0, p.accuracyM ?? 0)) {
+      total += step;
+      from = p;
+    }
   }
   return total;
 }
+
+/** A place's first readings settle where it is; later ones may drift this far from there. */
+const ANCHOR_POINTS = 3;
+const MAX_DRIFT = 1;
 
 export function buildTimeline(input: HistoryPoint[]): TimelineItem[] {
   const points = usable(input);
   const items: TimelineItem[] = [];
   let cluster: HistoryPoint[] = [];
   let centre = { lat: 0, lng: 0 };
+  // Where the place's first readings were. The centre follows every reading, so a slow walk with
+  // readings close together could drag it along and become one long "stay"; readings also have
+  // to stay near where the place began.
+  let anchor = { lat: 0, lng: 0 };
   // Points since the last stay ended, which make up the next trip.
   let travelled: HistoryPoint[] = [];
 
@@ -115,6 +127,7 @@ export function buildTimeline(input: HistoryPoint[]): TimelineItem[] {
   const startCluster = (p: HistoryPoint) => {
     cluster = [p];
     centre = { lat: p.lat, lng: p.lng };
+    anchor = centre;
   };
   const addToCluster = (p: HistoryPoint) => {
     cluster.push(p);
@@ -123,8 +136,12 @@ export function buildTimeline(input: HistoryPoint[]): TimelineItem[] {
       lat: centre.lat + (p.lat - centre.lat) / cluster.length,
       lng: centre.lng + (p.lng - centre.lng) / cluster.length,
     };
+    if (cluster.length <= ANCHOR_POINTS) anchor = centre;
   };
-  const isHere = (p: HistoryPoint) => cluster.length > 0 && distanceM(centre, p) <= stayRadius(p);
+  const isHere = (p: HistoryPoint) =>
+    cluster.length > 0 &&
+    distanceM(centre, p) <= stayRadius(p) &&
+    distanceM(anchor, p) <= MAX_DRIFT * stayRadius(p);
 
   // One reading outside the place is held back: if the next is inside again, it was a stray
   // reading and is left out; two outside in a row mean they really left. A single rough reading

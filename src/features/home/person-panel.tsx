@@ -20,6 +20,8 @@ import { type as typeStyles, useColors } from '@/lib/theme';
 import { timeAgoShort } from '@/lib/time';
 
 const clock = (ms: number) => new Date(ms).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+/** Their position counts as at today's last place within this, or its own accuracy if rougher. */
+const HERE_M = 300;
 
 type Props = {
   groupId: string;
@@ -78,9 +80,13 @@ export function PersonPanel({
   // "Here since 9:10 AM" when today's last stay is still going on.
   const hereSince = useMemo(() => {
     const last = timeline.at(-1);
-    return last?.kind === 'stay' && position && Date.parse(position.recordedAt) - last.to < 15 * 60_000
-      ? last.from
-      : null;
+    // Only while they're still there: history waits for a second reading before it decides
+    // someone left, so right after leaving, the last stay is still today's last item.
+    const stillThere =
+      last?.kind === 'stay' &&
+      position &&
+      distanceMeters(asFix(last), asFix(position)) <= Math.max(HERE_M, position.accuracyM ?? 0);
+    return stillThere && Date.parse(position.recordedAt) - last.to < 15 * 60_000 ? last.from : null;
   }, [timeline, position]);
 
   const status = position
@@ -252,7 +258,7 @@ export function PersonPanel({
   );
 }
 
-const asFix = (p: LivePosition) => ({ lat: p.lat, lng: p.lng, time: 0 });
+const asFix = (p: { lat: number; lng: number }) => ({ lat: p.lat, lng: p.lng, time: 0 });
 
 /** "350 m away", "2.3 km away", "48 km away". */
 function awayText(meters: number) {
