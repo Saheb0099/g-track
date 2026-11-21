@@ -80,6 +80,24 @@ indoor readings were dropped.
 (30 minutes, plus Android's delays). Scale it with the interval (`trustFor`), and test with
 readings every 15 and 30 minutes, not only every minute.
 
+## 7. A fixed "same place" circle for history (fixed, Nov 2026)
+
+**Bug:** history counted someone as staying put only while each reading was within 150 m of the
+place, and one reading outside ended the stay. Indoors, readings are often ±100–250 m, so a phone
+lying on a desk kept "leaving": no stay formed, and every wobble was added up as travel. On 21 Nov
+a phone that never moved showed "Moved 11 km" over two hours at night.
+
+**Rules to keep:**
+
+- Judge "still here" against each reading's own accuracy (up to 300 m), not a fixed circle.
+- Don't let one reading end a stay: two outside in a row mean they left (the same idea as
+  `nextHeld` in the location rules).
+- When adding up distance, skip steps shorter than the readings' accuracy; wobbles back and forth
+  add up to kilometres.
+- Known cost: places under ~300 m apart, seen only with rough readings, often show as one place.
+
+Tests: `npm run test:timeline` (a phone lying still, trips by bus and on foot, two nearby places).
+
 ## Before changing location rules
 
 1. Add a test to `scripts/test-rules.mjs` that fails on the current code for the problem you're
@@ -87,3 +105,4 @@ readings every 15 and 30 minutes, not only every minute.
 2. Make sure the old tests still pass: trains and buses with rough readings, glitches, clock
    changes, indoors with only ±200 m readings, and readings every 15 and 30 minutes.
 3. Try it on a phone and read its log before calling it done.
+4. For history (`src/features/history/timeline.ts`), do the same with `scripts/test-timeline.mjs`.

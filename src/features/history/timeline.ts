@@ -9,6 +9,12 @@ export type TimelineItem = Stay | Trip;
 
 /** Points within this distance of a place's centre count as being there. */
 const STAY_RADIUS_M = 150;
+/**
+ * A rough reading counts as being there within its own accuracy, up to this. Indoors, Wi-Fi and
+ * tower readings are often ±100–250 m: with only the 150 m above, a phone lying still kept
+ * "leaving", and the jumps added up to kilometres (LESSONS.md, 7).
+ */
+const MAX_STAY_RADIUS_M = 300;
 /** Shorter visits than this are part of a trip (a red light, a quick stop). */
 const MIN_STAY_MS = 10 * 60_000;
 /** Fixes rougher than this are left out of paths and distances. */
@@ -59,9 +65,23 @@ export function usable(points: HistoryPoint[]): HistoryPoint[] {
   return current;
 }
 
+/** How far from a place's centre this reading can be and still count as being there. */
+function stayRadius(p: HistoryPoint): number {
+  return Math.max(STAY_RADIUS_M, Math.min(p.accuracyM ?? 0, MAX_STAY_RADIUS_M));
+}
+
+/**
+ * Length of a path. A step shorter than its readings' accuracy isn't counted: it can't be told
+ * apart from the readings wobbling, and wobbles going back and forth add up.
+ */
 function pathLength(points: HistoryPoint[]): number {
   let total = 0;
-  for (let i = 1; i < points.length; i++) total += distanceM(points[i - 1], points[i]);
+  for (let i = 1; i < points.length; i++) {
+    const a = points[i - 1];
+    const b = points[i];
+    const step = distanceM(a, b);
+    if (step > Math.max(a.accuracyM ?? 0, b.accuracyM ?? 0)) total += step;
+  }
   return total;
 }
 
@@ -92,21 +112,50 @@ export function buildTimeline(input: HistoryPoint[]): TimelineItem[] {
     cluster = [];
   };
 
+  const startCluster = (p: HistoryPoint) => {
+    cluster = [p];
+    centre = { lat: p.lat, lng: p.lng };
+  };
+  const addToCluster = (p: HistoryPoint) => {
+    cluster.push(p);
+    // Running average keeps the centre on where the person mostly was.
+    centre = {
+      lat: centre.lat + (p.lat - centre.lat) / cluster.length,
+      lng: centre.lng + (p.lng - centre.lng) / cluster.length,
+    };
+  };
+  const isHere = (p: HistoryPoint) => cluster.length > 0 && distanceM(centre, p) <= stayRadius(p);
+
+  // One reading outside the place is held back: if the next is inside again, it was a stray
+  // reading and is left out; two outside in a row mean they really left. A single rough reading
+  // used to end the stay, and the readings after it rarely settled into one again.
+  let held: HistoryPoint | null = null;
   for (const p of points) {
-    if (cluster.length > 0 && distanceM(centre, p) <= STAY_RADIUS_M) {
-      cluster.push(p);
-      // Running average keeps the centre on where the person mostly was.
-      centre = {
-        lat: centre.lat + (p.lat - centre.lat) / cluster.length,
-        lng: centre.lng + (p.lng - centre.lng) / cluster.length,
-      };
+    if (isHere(p)) {
+      held = null;
+      addToCluster(p);
+      continue;
+    }
+    if (cluster.length > 0 && !held) {
+      held = p;
       continue;
     }
     closeCluster();
-    cluster = [p];
-    centre = { lat: p.lat, lng: p.lng };
+    if (held) {
+      // They left at the held reading: the next place or trip starts there.
+      startCluster(held);
+      held = null;
+      if (isHere(p)) {
+        addToCluster(p);
+        continue;
+      }
+      closeCluster();
+    }
+    startCluster(p);
   }
   closeCluster();
+  // A last reading outside the place isn't confirmed yet: it's left out until the next one shows
+  // whether they really left.
 
   // Still on the move at the end of the data.
   const last = items.at(-1);
