@@ -3,9 +3,6 @@ import { router, useFocusEffect, useIsFocused, useLocalSearchParams } from 'expo
 import { NavigationBar } from 'expo-navigation-bar';
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, BackHandler, Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
-// The gesture handler's ScrollView, so the days scroll sideways inside the sheet (React Native's
-// own one loses the swipe to the sheet).
-import { ScrollView } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Text } from '@/components/text';
@@ -21,7 +18,7 @@ import { buildTimeline, formatDistance, travelledM, type Stay, type TimelineItem
 import { useMapIsDark } from '@/features/map/styles';
 import { useAuth } from '@/lib/auth';
 import { friendlyError } from '@/lib/errors';
-import { type as typeStyles, useColors } from '@/lib/theme';
+import { fonts, type as typeStyles, useColors } from '@/lib/theme';
 
 const clock = (ms: number) => new Date(ms).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
 
@@ -124,42 +121,41 @@ export default function MemberHistory() {
             height - safe.bottom - (top + 72),
           ]}
           enableDynamicSizing={false}
-          // A sideways swipe belongs to the day chips, not the sheet.
-          activeOffsetY={[-10, 10]}
-          failOffsetX={[-10, 10]}
           backgroundComponent={SheetBackground}
           handleIndicatorStyle={{ backgroundColor: `${colors.muted}66`, width: 32, height: 4 }}>
           <BottomSheetScrollView contentContainerStyle={styles.sheetContent}>
             <View style={styles.peekPart} onLayout={(e) => setPeekHeight(Math.round(e.nativeEvent.layout.height))}>
-              {/* Filter chips for the last seven days. */}
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                // flexGrow 0: a horizontal ScrollView otherwise stretches to the full height available.
-                style={styles.daysScroll}
-                contentContainerStyle={styles.days}>
+              {/* The last seven days as one week strip: all fit across, so none is cut off at the
+                  edge, and the chosen day is always in view. */}
+              <View style={styles.days}>
                 {days.map((d, i) => {
                   const active = i === dayIndex;
+                  const weekday = d.isToday ? 'Today' : d.start.toLocaleDateString(undefined, { weekday: 'short' });
                   return (
                     <Pressable
                       key={d.start.toISOString()}
                       onPress={() => pickDay(i)}
                       accessibilityRole="button"
+                      accessibilityLabel={d.start.toLocaleDateString(undefined, {
+                        weekday: 'long',
+                        day: 'numeric',
+                        month: 'long',
+                      })}
                       accessibilityState={{ selected: active }}
-                      // The chosen day is filled; every chip keeps its size, so nothing moves on a tap.
-                      style={[
-                        styles.day,
-                        active
-                          ? { backgroundColor: colors.tonal, borderColor: colors.tonal }
-                          : { borderColor: colors.border },
-                      ]}>
-                      <Text style={[typeStyles.label, { color: active ? colors.onStrong : colors.muted }]}>
-                        {d.label}
+                      android_ripple={{ color: `${colors.text}14`, borderless: false }}
+                      style={[styles.day, active && { backgroundColor: colors.tonal }]}>
+                      <Text
+                        style={[styles.weekday, { color: active ? colors.onStrong : colors.muted }]}
+                        numberOfLines={1}>
+                        {weekday}
+                      </Text>
+                      <Text style={[typeStyles.bodyStrong, { color: active ? colors.onStrong : colors.text }]}>
+                        {d.start.getDate()}
                       </Text>
                     </Pressable>
                   );
                 })}
-              </ScrollView>
+              </View>
 
               {/* Loading and empty days take the tiles' height, so the sheet doesn't jump between days. */}
               {history.isPending ? (
@@ -297,17 +293,16 @@ const styles = StyleSheet.create({
     paddingRight: 16,
     flexShrink: 1,
   },
-  daysScroll: { flexGrow: 0 },
-  days: { paddingHorizontal: 16, gap: 8 },
+  days: { flexDirection: 'row', paddingHorizontal: 12, gap: 4 },
   day: {
-    height: 32,
-    paddingHorizontal: 16,
-    borderRadius: 8,
-    borderWidth: 1,
-    flexDirection: 'row',
+    flex: 1,
+    height: 56,
+    borderRadius: 16,
     alignItems: 'center',
-    gap: 8,
+    justifyContent: 'center',
+    overflow: 'hidden',
   },
+  weekday: { fontFamily: fonts.medium, fontSize: 12, lineHeight: 16 },
   sheetContent: { paddingTop: 4, paddingBottom: 24, gap: 16 },
   peekPart: { gap: 16 },
   // As tall as a row of stat tiles.
