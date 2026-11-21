@@ -18,7 +18,7 @@ it uses has a free plan. See [ROADMAP.md](ROADMAP.md) for what's done and what's
 - Supabase: Postgres with row-level security, Realtime, scheduled jobs (pg_cron)
 - Google sign-in
 - Firebase Cloud Messaging, only to wake a friend's phone for "Get location now"
-- MapLibre with OpenFreeMap and OpenStreetMap tiles
+- MapLibre with free map tiles (OpenFreeMap, CARTO, OpenStreetMap and others)
 - A small native Android module (`modules/gtrack-alarm`) for exact 5-minute wake-ups
 
 ---
@@ -245,7 +245,7 @@ build again, and add a migration that sets the new number, so older copies show 
 "update available" notice:
 
 ```sql
-update public.app_config set latest_version_code = 4, latest_version_name = '1.0.3', updated_at = now();
+update public.app_config set latest_version_code = 5, latest_version_name = '1.0.4', updated_at = now();
 ```
 
 Then `npx supabase db push --remote`.
@@ -256,7 +256,7 @@ Then `npx supabase db push --remote`.
   location keep it awake; if it does pause, restore it from the Supabase dashboard.
 - **History is kept for 7 days**, then deleted automatically. Deleting an account or a group
   waits 7 days too, and can be cancelled until then.
-- **Map tiles** come from free public servers (OpenFreeMap, OpenStreetMap). Fine for a group
+- **Map tiles** come from free public servers (OpenFreeMap, CARTO, OpenStreetMap). Fine for a group
   of friends; don't build something large on them.
 
 ## Checks
@@ -265,6 +265,7 @@ Then `npx supabase db push --remote`.
 npm run typecheck
 npm run lint
 npm run test:rules   # location rules: trips, glitches, clock changes
+npm run test:timeline   # history: places, trips and distance from made-up days
 npm run test:db      # database access rules, run on the linked project and rolled back
 ```
 

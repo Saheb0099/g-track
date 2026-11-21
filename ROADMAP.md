@@ -31,13 +31,22 @@ A free location-sharing app for a circle of friends. Android first.
 - [x] Pause for 1 hour, 8 hours or until turned back on
 - [x] Stop sharing with one group only
 - [x] Today's distance on each person's card
-- [x] Get location now: wakes a friend's phone for a fresh position, with a notice on their phone
+- [x] Get location now: wakes a friend's phone for a fresh position, with a notice on their phone,
+      and counts down to when they can be asked again
+- [x] Material 3 redesign
+- [x] History days as a week strip
+- [x] Pins follow the map's brightness, and merge when they'd overlap on screen
+- [x] Map credit folds into a small (i) after 5 seconds; every provider credited in About
 
 ### Fixes
 
 - [x] Indoors after a gap, rough Wi-Fi/cell fixes that agree are now saved (before, nothing was until a GPS fix)
 - [x] Indoors, a single hop between mobile towers isn't saved as a move
 - [x] Groups checking every 15–30 minutes: trust timers last at least 2½ checks, so indoor and train readings aren't dropped
+- [x] History: a phone lying still indoors no longer adds up kilometres from rough readings
+- [x] History: slow walks are kept, and travel before the day's first stop counts
+- [x] "Here since" only shows while they're still at that place
+- [x] Fixes from code reviews: compass, status bar, sharing count, links, leave-group admin
 
 ### Security
 
@@ -50,6 +59,7 @@ A free location-sharing app for a circle of friends. Android first.
 - [x] 1.0.1
 - [x] 1.0.2
 - [x] 1.0.3: dark-mode buttons, new pause options, group switch, today's distance, backup fix
+- [x] 1.0.4: Get location now, Material 3 redesign, more accurate history, map and pin fixes
 
 ## Next
 
