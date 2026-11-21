@@ -81,6 +81,15 @@ export function useColors(): Colors {
 }
 
 /**
+ * The palette for a light or dark background. Things drawn on the map (pins, labels, paths) use
+ * the map's own brightness rather than the app's theme: a map with no dark version stays light
+ * in dark mode, and dark pins on it looked out of place.
+ */
+export function colorsFor(darkBackground: boolean): Colors {
+  return darkBackground ? dark : light;
+}
+
+/**
  * Roboto, bundled and loaded in the root layout (@expo-google-fonts/roboto). Android's own
  * "sans-serif" isn't always Roboto: some phone makers (Vivo, Xiaomi…) swap in their own font.
  */

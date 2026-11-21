@@ -5,8 +5,8 @@ import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 
 import { Icon } from '@/components/icon';
 import { Text } from '@/components/text';
-import { useChosenMapStyle } from '@/features/map/styles';
-import { type as typeStyles, useColors } from '@/lib/theme';
+import { useChosenMapStyle, useMapIsDark } from '@/features/map/styles';
+import { colorsFor, type as typeStyles } from '@/lib/theme';
 
 /**
  * How long the full credit shows before it folds into a small (i). OpenStreetMap's attribution
@@ -22,7 +22,7 @@ const SHOWN_MS = 5_000;
  * the map has finished loading.
  */
 export function MapCredit({ top, mapReady }: { top: number; mapReady: boolean }) {
-  const colors = useColors();
+  const colors = colorsFor(useMapIsDark());
   const style = useChosenMapStyle();
   const extra = 'credit' in style ? ` · ${style.credit}` : '';
   const text = `© OpenStreetMap${extra}`;

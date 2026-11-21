@@ -17,9 +17,8 @@ import { distanceMeters } from '@/features/location/rules';
 import type { LivePosition } from '@/features/map/api';
 import { boundsAround, circlePolygon } from '@/features/map/geo';
 import { MapCredit } from '@/features/map/map-credit';
-import { useMapStyle } from '@/features/map/styles';
-import { useAppColorScheme } from '@/lib/appearance';
-import { fonts, useColors } from '@/lib/theme';
+import { useMapIsDark, useMapStyle } from '@/features/map/styles';
+import { colorsFor, fonts } from '@/lib/theme';
 
 /**
  * A position older than this is drawn faded: the phone has stopped reporting. That's three
@@ -30,15 +29,25 @@ export function staleAfterMs(saveEveryMin: number) {
 }
 /** People closer than this share one pin, so their pins and names don't pile up on each other. */
 const SHARED_PIN_M = 60;
+/**
+ * Pins closer than this on screen share one too: zoomed out, people a few hundred metres apart
+ * are drawn on top of each other (a pin is about 52 points wide, its name above it).
+ */
+const SHARED_PIN_PT = 56;
+
+/** Metres one screen point covers at this zoom and latitude (MapLibre's 512-point tiles). */
+function metresPerPoint(zoom: number, lat: number) {
+  return (40_075_016.686 * Math.cos((lat * Math.PI) / 180)) / (512 * 2 ** zoom);
+}
 /** A shared pin shows this many faces, then "+N". */
 const MAX_FACES = 3;
 
-/** Groups positions that are close together (you first in yours), for shared pins. */
-function groupClose(positions: LivePosition[], meId?: string): LivePosition[][] {
+/** Groups positions within `withinM` of each other (you first in yours), for shared pins. */
+function groupClose(positions: LivePosition[], withinM: number, meId?: string): LivePosition[][] {
   const groups: LivePosition[][] = [];
   const asFix = (p: LivePosition) => ({ lat: p.lat, lng: p.lng, time: 0 });
   for (const p of positions) {
-    const near = groups.find((g) => distanceMeters(asFix(g[0]), asFix(p)) <= SHARED_PIN_M);
+    const near = groups.find((g) => distanceMeters(asFix(g[0]), asFix(p)) <= withinM);
     if (near) near.push(p);
     else groups.push([p]);
   }
@@ -77,8 +86,9 @@ export const GroupMap = forwardRef<GroupMapHandle, Props>(function GroupMap(
   { positions, members, now, meId, selectedId, onSelect, insets, staleMs, frameKey, onTurn },
   ref,
 ) {
-  const colors = useColors();
-  const dark = useAppColorScheme() === 'dark';
+  // Pins, labels and rings follow the map's brightness, not the app's theme.
+  const dark = useMapIsDark();
+  const colors = colorsFor(dark);
   const mapStyle = useMapStyle();
   const camera = useRef<CameraRef>(null);
   const framedFor = useRef<string | null>(null);
@@ -88,12 +98,18 @@ export const GroupMap = forwardRef<GroupMapHandle, Props>(function GroupMap(
   // Where the camera is now: turning to north keeps this centre and zoom.
   const view = useRef<ViewState | null>(null);
   const turn = useRef({ bearing: 0, tilted: false });
+  // The zoom in quarter steps, to tell which pins overlap on screen (not on every frame of a zoom).
+  const [zoom, setZoom] = useState(1);
   // The camera ignores moves made before the map has loaded its style.
   const [loaded, setLoaded] = useState(false);
 
   const people = useMemo(() => new globalThis.Map(members.map((m) => [m.userId, m])), [members]);
   const points = useMemo(() => positions.map((p) => [p.lng, p.lat] as [number, number]), [positions]);
   const padding = { top: insets.top + 40, bottom: insets.bottom + 40, left: 48, right: 72 };
+
+  // People share a pin when close on the ground, or when their pins would overlap at this zoom.
+  const lat = view.current?.center[1] ?? positions[0]?.lat ?? 0;
+  const sharedPinM = Math.max(SHARED_PIN_M, SHARED_PIN_PT * metresPerPoint(zoom, lat));
 
   const rings = useMemo<GeoJSON.FeatureCollection>(
     () => ({
@@ -137,6 +153,8 @@ export const GroupMap = forwardRef<GroupMapHandle, Props>(function GroupMap(
 
   function trackView(next: ViewState) {
     view.current = next;
+    const quarter = Math.round(next.zoom * 4) / 4;
+    if (quarter !== zoom) setZoom(quarter);
     // Whole degrees only, so the compass updates without re-rendering on every frame of a pan.
     const bearing = Math.round(next.bearing) % 360;
     const tilted = Math.round(next.pitch) > 0;
@@ -184,7 +202,7 @@ export const GroupMap = forwardRef<GroupMapHandle, Props>(function GroupMap(
           />
         </GeoJSONSource>
 
-        {groupClose(positions, meId).map((group) => {
+        {groupClose(positions, sharedPinM, meId).map((group) => {
           const first = (p: LivePosition) =>
             p.userId === meId ? 'You' : (people.get(p.userId)?.displayName ?? '?').split(' ')[0];
           const names = group.map(first);
@@ -236,7 +254,7 @@ export const GroupMap = forwardRef<GroupMapHandle, Props>(function GroupMap(
                             backgroundColor: avatarColors(name, dark)[0],
                           },
                         ]}>
-                        <Avatar name={name} uri={member?.avatarUrl} size={size} />
+                        <Avatar name={name} uri={member?.avatarUrl} size={size} dark={dark} />
                       </View>
                     );
                   })}

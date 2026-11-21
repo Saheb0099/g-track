@@ -49,10 +49,18 @@ export function avatarColors(name: string, dark: boolean): [string, string] {
   return PAIRS[hash % PAIRS.length][dark ? 1 : 0];
 }
 
-type Props = { name: string; uri?: string | null; size?: number; dim?: boolean };
+type Props = {
+  name: string;
+  uri?: string | null;
+  size?: number;
+  dim?: boolean;
+  /** Colours for a dark background; defaults to the app's theme (pins pass the map's). */
+  dark?: boolean;
+};
 
-export function Avatar({ name, uri, size = 40, dim = false }: Props) {
-  const [background, text] = avatarColors(name, useAppColorScheme() === 'dark');
+export function Avatar({ name, uri, size = 40, dim = false, dark }: Props) {
+  const appDark = useAppColorScheme() === 'dark';
+  const [background, text] = avatarColors(name, dark ?? appDark);
   const box = { width: size, height: size, borderRadius: size / 2, opacity: dim ? 0.55 : 1 };
 
   if (uri) {

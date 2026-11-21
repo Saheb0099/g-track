@@ -5,8 +5,8 @@ import { StyleSheet, View } from 'react-native';
 import { usable, type HistoryPoint, type Stay } from '@/features/history/timeline';
 import { boundsAround } from '@/features/map/geo';
 import { MapCredit } from '@/features/map/map-credit';
-import { useMapStyle } from '@/features/map/styles';
-import { useColors } from '@/lib/theme';
+import { useMapIsDark, useMapStyle } from '@/features/map/styles';
+import { colorsFor } from '@/lib/theme';
 
 export type HistoryMapHandle = { focus: (lat: number, lng: number) => void };
 
@@ -24,7 +24,8 @@ export const HistoryMap = forwardRef<HistoryMapHandle, Props>(function HistoryMa
   { points, stays, selected, insets, frameKey },
   ref,
 ) {
-  const colors = useColors();
+  // The path and markers follow the map's brightness, not the app's theme.
+  const colors = colorsFor(useMapIsDark());
   const mapStyle = useMapStyle();
   const camera = useRef<CameraRef>(null);
   // The camera ignores moves made before the map has loaded its style.
