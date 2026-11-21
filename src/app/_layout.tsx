@@ -17,9 +17,18 @@ import { QueryProvider } from '@/lib/query';
 SplashScreen.preventAutoHideAsync();
 applySavedTheme();
 
-// @gorhom/bottom-sheet passes dependency arrays to Reanimated, which only uses them on the web;
-// the warning is harmless and would otherwise cover the sheet during development.
-LogBox.ignoreLogs(['[Reanimated] Dependencies should only be used on the web']);
+// @gorhom/bottom-sheet passes dependency arrays to Reanimated, which only uses them on the web.
+// The warning is harmless but comes many times a second: it would cover the sheet during
+// development and bury real warnings in the dev server's log, so it's dropped there too.
+const SHEET_WARNING = '[Reanimated] Dependencies should only be used on the web';
+LogBox.ignoreLogs([SHEET_WARNING]);
+if (__DEV__) {
+  const warn = console.warn;
+  console.warn = (...args: unknown[]) => {
+    if (typeof args[0] === 'string' && args[0].startsWith(SHEET_WARNING)) return;
+    warn(...args);
+  };
+}
 
 export default function RootLayout() {
   return (

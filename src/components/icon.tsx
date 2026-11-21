@@ -25,7 +25,6 @@ const GLYPHS = {
   contrast: 0xeb37,
   delete: 0xe872,
   directions: 0xe52e,
-  edit: 0xe3c9,
   error: 0xe000,
   groups: 0xf233,
   info: 0xe88e,
@@ -39,7 +38,6 @@ const GLYPHS = {
   my_location: 0xe55c,
   navigation: 0xe55d,
   near_me: 0xe569,
-  notifications: 0xe7f4,
   open_in_new: 0xe89e,
   pause_circle: 0xe1a2,
   radio_button_unchecked: 0xe836,
@@ -53,7 +51,6 @@ const GLYPHS = {
   timer: 0xe425,
   verified_user: 0xe8e8,
   visibility_off: 0xe8f5,
-  warning: 0xe002,
 } as const;
 
 export type IconName = keyof typeof GLYPHS;

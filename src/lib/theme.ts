@@ -12,7 +12,6 @@ const light = {
   surface: '#FFFFFF',
   /** Bars and buttons floating over the map (surface container). */
   glass: '#ECEDF4',
-  glassBorder: 'transparent',
   surfaceHighest: '#E2E2E9',
   text: '#1A1B20',
   muted: '#44464F',
@@ -48,7 +47,6 @@ const dark: typeof light = {
   background: '#17181D',
   surface: '#26282D',
   glass: '#26282D',
-  glassBorder: 'transparent',
   surfaceHighest: '#33353A',
   text: '#E2E2E9',
   muted: '#C5C6D0',
