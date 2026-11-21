@@ -189,9 +189,11 @@ export default function MemberHistory() {
 
             {!history.isPending && !history.isError && points.length > 0 && (
               <>
+                {/* Readings that never settled for 10 minutes and didn't go far: a real day on the
+                    move shows as a trip instead. */}
                 {timeline.length === 0 && (
                   <Text style={[typeStyles.body, styles.empty, { color: colors.muted }]}>
-                    On the move all day, with no stop of 10 minutes or more.
+                    No stop of 10 minutes or more on this day.
                   </Text>
                 )}
                 <View style={styles.padded}>
@@ -238,13 +240,14 @@ function TimelineRow({
 }) {
   const colors = useColors();
   const stay = item.kind === 'stay';
-  // The day's first place is marked in green, as on the map; a selected place is filled.
-  const node = !stay
-    ? { bg: colors.tonal, fg: colors.onTonal }
-    : selected
-      ? { bg: colors.accent, fg: colors.onAccent }
-      : first
-        ? { bg: colors.successFill, fg: colors.onSuccessFill }
+  // Where the day began is green, as the map's start dot: the first place, or the first trip
+  // when the day began on the move. A selected place is filled.
+  const node = selected
+    ? { bg: colors.accent, fg: colors.onAccent }
+    : first
+      ? { bg: colors.successFill, fg: colors.onSuccessFill }
+      : !stay
+        ? { bg: colors.tonal, fg: colors.onTonal }
         : { bg: colors.accentFill, fg: colors.onAccentFill };
   return (
     <Pressable
